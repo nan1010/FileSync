@@ -1,29 +1,13 @@
 package file;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.MalformedURLException;
-import java.net.SocketException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-
+import net.contentobjects.jnotify.JNotify;
+import net.contentobjects.jnotify.JNotifyException;
+import net.contentobjects.jnotify.JNotifyListener;
 import org.apache.commons.net.ftp.FTPClient;
-import org.apache.commons.net.ftp.FTPFile;
 import org.apache.commons.net.ftp.FTPReply;
 
-import net.contentobjects.jnotify.JNotify;
-
-import net.contentobjects.jnotify.JNotifyListener;
-import net.contentobjects.jnotify.JNotifyException;
+import java.io.*;
+import java.util.*;
 
 
 
@@ -95,7 +79,7 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 			e.printStackTrace();
 		}
 		try {
-			while(true) {
+			while(true) {// jnotify监控线程为守护线程，因此主线程不能终止，否则会导致进程退出
 				Thread.sleep(5000);
 			}
 		} catch (Exception e) {
@@ -128,8 +112,13 @@ public class jNotifyFileTool2 implements  JNotifyListener {
         }
            return null;
     }
-    
-    public static  boolean iszhanyong(String filepath) {
+
+	/**
+	 * 文件占用判断
+	 * @param filepath
+	 * @return
+	 */
+	public static  boolean iszhanyong(String filepath) {
 		try {
 		    File file = new File(filepath);
 		    if(file.renameTo(file)) {
@@ -143,7 +132,12 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 		}
 		
 	}
-	
+
+	/**
+	 * 拷贝
+	 * @param fileName
+	 * @param pathRoot
+	 */
 	public static void  copyBak(String fileName,String pathRoot ) {
 		String sourceFile=pathRoot+"/"+fileName;
 		String bakFile=BASE_BAK_PATH+"/"+fileName;
@@ -213,10 +207,13 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 		}
 
 	}
-	
-	
-	
-	 
+
+	/**
+	 * ftp传输
+	 * @param parentPath
+	 * @param path
+	 * @param retries
+	 */
 	 public static void ftpRemote(String parentPath,String path , int retries){
 		 if(retries > 3) {
 			 System.err.println("连接失败：重试次数3次！");
@@ -524,8 +521,8 @@ public class jNotifyFileTool2 implements  JNotifyListener {
         
 		//copyfile(sourceFile, tagetFile);
 		//renamePic(name,sourePath);
-		//System.out.println("Դ�ļ�·����"+sourceFile);
-		//System.err.println("�ļ�������, ����λ��Ϊ�� " +name);
+		//System.out.println("????·????"+sourceFile);
+		//System.err.println("?????????, ????λ????? " +name);
 
 
 	    

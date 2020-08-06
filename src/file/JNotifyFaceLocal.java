@@ -70,6 +70,12 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 			System.err.println("jnotify -----------已启动-----------");
 		} catch (JNotifyException e) {
 			e.printStackTrace();
+		} try {
+			while(true) {// jnotify监控线程为守护线程，因此主线程不能终止，否则会导致进程退出
+				Thread.sleep(5000);
+			}
+		} catch (Exception e) {
+			// TODO: handle exception
 		}
 	}
 	
@@ -94,7 +100,7 @@ public class JNotifyFaceLocal implements  JNotifyListener {
            inBuff=new BufferedInputStream(input);  
            output = new FileOutputStream(targetFile);
            outBuff=new BufferedOutputStream(output);  
-	       byte[] b = new byte[1024 * 5];  
+	       byte[] b = new byte[1024 * 4];
 	       int len;  
 	       while ((len =inBuff.read(b)) != -1) {  
            outBuff.write(b, 0, len);  
@@ -119,7 +125,7 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 	    
 	    try{
 	        Runtime.getRuntime().exec(cmd);
-	        System.err.println("cmd:"+cmd);
+	        System.err.println("cmd:?"+cmd);
 	        
 	    }catch(IOException e){
 	        e.printStackTrace();
@@ -192,7 +198,12 @@ public class JNotifyFaceLocal implements  JNotifyListener {
        }
           return null;
    }
-   
+
+	/**
+	 * 文件占用判断
+	 * @param filepath
+	 * @return
+	 */
    public static  boolean iszhanyong(String filepath) {
 		try {
 		    File file = new File(filepath);
@@ -346,9 +357,13 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 		}
        
 	}
-   
-   
-   public static void  copyBak(String fileName,String pathRoot ) {
+
+	/**
+	 * 文件拷贝
+	 * @param fileName
+	 * @param pathRoot
+	 */
+	public static void  copyBak(String fileName,String pathRoot) {
 		boolean status = fileName.contains("SNAP");
 		boolean status1 = fileName.contains("BACK");
 		if(status) {
@@ -510,20 +525,13 @@ public class JNotifyFaceLocal implements  JNotifyListener {
        return files;
 
    }
-   
-   
 
-   
- 
+
+
+
+
 	/**
-	 * ������Ŀ¼��һ�����µ��ļ����������򼴴������¼�
-	 * 
-	 * @param wd
-	 *            �����߳�id
-	 * @param rootPath
-	 *            ����Ŀ¼
-	 * @param name
-	 *            �ļ�����
+	 * 监听文件创建方法重写
 	 */
 	@Override
 	public void fileCreated(int wd, String rootPath, String Filename) {
@@ -554,8 +562,8 @@ public class JNotifyFaceLocal implements  JNotifyListener {
         
 		//copyfile(sourceFile, tagetFile);
 		//renamePic(name,sourePath);
-		//System.out.println("Դ�ļ�·����"+sourceFile);
-		//System.err.println("�ļ�������, ����λ��Ϊ�� " +name);
+		//System.out.println("????·????"+sourceFile);
+		//System.err.println("?????????, ????λ????? " +name);
 
 
 	    

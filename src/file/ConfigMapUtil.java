@@ -14,23 +14,23 @@ public class ConfigMapUtil {
 	private static Map<String, String> map = new HashMap<>();
 	static {
         try {
-            //¶ÁÈ¡ÎÄ¼şÁ÷
+            //è¯»å–æ–‡ä»¶æµ
             InputStream resourceAsStream = Thread.currentThread().getContextClassLoader().getResourceAsStream("config.properties");
-            //×ª±äÎª×Ö·ûÁ÷
+            //è½¬å˜ä¸ºå­—ç¬¦æµ
             InputStreamReader inputStreamReader = new InputStreamReader(resourceAsStream,"utf-8");
-            //´´½¨ Properties ¶ÔÏó
+            //åˆ›å»º Properties å¯¹è±¡
             Properties properties = new Properties();
            // prop.load(new InputStreamReader(in, "utf-8"));
-            //¼ÓÔØ×Ö·ûÁ÷
+            //åŠ è½½å­—ç¬¦æµ
             properties.load(inputStreamReader);
-            //»ñÈ¡ËùÓĞkey
+            //è·å–æ‰€æœ‰key
             Enumeration enumeration = properties.propertyNames();
             while (enumeration.hasMoreElements()) {
-                //±éÀúkey
+                //éå†key
                 String key = (String) enumeration.nextElement();
-                //¸ù¾İkeyÈ¡Öµ
+                //æ ¹æ®keyå–å€¼
                 String value = properties.getProperty(key);
-                //·ÅÈëmapÖĞ
+                //æ”¾å…¥mapä¸­
                 map.put(key, value);
             }
         } catch (Exception e) {
@@ -57,7 +57,7 @@ public class ConfigMapUtil {
 		try {
 			process = Runtime.getRuntime().exec(command);
 			try {
-				//µÈ´ıÃüÁîÖ´ĞĞÍê³É
+				//ç­‰å¾…å‘½ä»¤æ‰§è¡Œå®Œæˆ
 				process.waitFor(10, TimeUnit.SECONDS);
 			} catch (InterruptedException e) {
 				e.printStackTrace();
@@ -67,7 +67,7 @@ public class ConfigMapUtil {
 			while (input.hasNextLine()) {
 				result += input.nextLine() + "\n";
 			}
-			result = command + "\n" + result; //¼ÓÉÏÃüÁî±¾Éí£¬´òÓ¡³öÀ´
+			result = command + "\n" + result; //åŠ ä¸Šå‘½ä»¤æœ¬èº«ï¼Œæ‰“å°å‡ºæ¥
 		} finally {
 			if (input != null) {
 				input.close();
@@ -86,7 +86,7 @@ public class ConfigMapUtil {
 		try {
 			process = Runtime.getRuntime().exec(command);
 			try {
-				//µÈ´ıÃüÁîÖ´ĞĞÍê³É
+				//ç­‰å¾…å‘½ä»¤æ‰§è¡Œå®Œæˆ
 				process.waitFor(10, TimeUnit.SECONDS);
 			} catch (InterruptedException e) {
 				e.printStackTrace();
@@ -96,7 +96,7 @@ public class ConfigMapUtil {
 			while (input.hasNextLine()) {
 				result += input.nextLine() + "\n";
 			}
-			result = command + "\n" + result; //¼ÓÉÏÃüÁî±¾Éí£¬´òÓ¡³öÀ´
+			result = command + "\n" + result; //åŠ ä¸Šå‘½ä»¤æœ¬èº«ï¼Œæ‰“å°å‡ºæ¥
 		} finally {
 			if (input != null) {
 				input.close();
