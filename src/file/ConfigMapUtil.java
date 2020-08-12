@@ -23,6 +23,9 @@ public class ConfigMapUtil {
            // prop.load(new InputStreamReader(in, "utf-8"));
             //加载字符流
             properties.load(inputStreamReader);
+            //关闭字节流、字符流
+            resourceAsStream.close();
+            inputStreamReader.close();
             //获取所有key
             Enumeration enumeration = properties.propertyNames();
             while (enumeration.hasMoreElements()) {
