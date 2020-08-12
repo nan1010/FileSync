@@ -11,21 +11,23 @@ import java.util.*;
 
 
 
-public class jNotifyFileTool2 implements  JNotifyListener {
-	private static final String REQUEST_BASE_PATH =ConfigMapUtil.getValueByKey("base.path");
-	private static final String BASE_BAK_PATH =ConfigMapUtil.getValueByKey("base.bakpath");
-	private static final String TARGET_BASE_PATH =ConfigMapUtil.getValueByKey("target.base.path");
-	private static final String FTP_USER =ConfigMapUtil.getValueByKey("ftp.user");
-	private static final String FTP_PWD =ConfigMapUtil.getValueByKey("ftp.pwd");
+public class jNotifyFileTool implements  JNotifyListener {
+	private static final String SOURCE_DIR =ConfigMapUtil.getValueByKey("source.dir");
+	private static final String DEST_DIR =ConfigMapUtil.getValueByKey("dest.dir");
 	private static final String FTP_IP =ConfigMapUtil.getValueByKey("ftp.ip");
 	private static final String FTP_PORT =ConfigMapUtil.getValueByKey("ftp.port");
-	private static final String REMOTE_IP =ConfigMapUtil.getValueByKey("remote.ip");
-	private static final String REMOTE_PWD =ConfigMapUtil.getValueByKey("remote.pwd");
-	private static final String REMOTE_USER =ConfigMapUtil.getValueByKey("remote.user");
-	private static final String REMOTE_PORT =ConfigMapUtil.getValueByKey("remote.port");
-	private static final String IS_LOCAL =ConfigMapUtil.getValueByKey("islocal");
-	private static final String IS_SOURCE_DEL =ConfigMapUtil.getValueByKey("issourcedel");
-	private static final String EXCELUDE_FOLDER =ConfigMapUtil.getValueByKey("exclude.folder");
+	private static final String FTP_USER =ConfigMapUtil.getValueByKey("ftp.user");
+	private static final String FTP_PWD =ConfigMapUtil.getValueByKey("ftp.pwd");
+	/*
+	 * private static final String REMOTE_IP
+	 * =ConfigMapUtil.getValueByKey("remote.ip"); private static final String
+	 * REMOTE_PWD =ConfigMapUtil.getValueByKey("remote.pwd"); private static final
+	 * String REMOTE_USER =ConfigMapUtil.getValueByKey("remote.user"); private
+	 * static final String REMOTE_PORT =ConfigMapUtil.getValueByKey("remote.port");
+	 */
+	private static final String IS_LOCAL =ConfigMapUtil.getValueByKey("isLocal");
+	private static final String IS_SOURCE_DEL =ConfigMapUtil.getValueByKey("source.delete");
+	private static final String EXCLUDE_DIR =ConfigMapUtil.getValueByKey("source.dir.exclude");
 	private static final String OS = System.getProperty("os.name").toLowerCase(); 
 	
 	static FTPClient ftpClient;
@@ -34,7 +36,7 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 	//public static String sourceFtpFileName="";
 	//public static String sourceFtpFileName2="";
 	/** 监控目录*/
-	String path = REQUEST_BASE_PATH;
+	String localPath = SOURCE_DIR;
 	/** 监控事件 */
 	int mask = JNotify.FILE_CREATED| JNotify.FILE_DELETED| JNotify.FILE_MODIFIED | JNotify.FILE_RENAMED;
 
@@ -45,13 +47,13 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 	
 	static{
 		//本地复制和源删除
-		if(IS_SOURCE_DEL.equals("1")&&IS_LOCAL.equals("0")) {
-			 List<File> list = getFileSort(REQUEST_BASE_PATH);
+		if(IS_SOURCE_DEL.equals("0")&&IS_LOCAL.equals("0")) {
+			 List<File> list = getFileSort(SOURCE_DIR);
 		        for (File file : list) {
 		        	startFirstLocal(file.getParent(),file.getPath());
 		        }
 		}if(IS_LOCAL.equals("1")) {
-				List<File> list = getFileSort(REQUEST_BASE_PATH);
+				List<File> list = getFileSort(SOURCE_DIR);
 		        for (File file : list) {
 		        	//String getParent=file.getParent().replace("\\", "/");
 		        	//String getPath=file.getPath().replace("\\", "/");
@@ -64,7 +66,7 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 
  
 	public static void main(String[] args) {
-		new jNotifyFileTool2().beginWatch();
+		new jNotifyFileTool().beginWatch();
 	}
  
 	/**
@@ -73,8 +75,8 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 	 */
 	public void beginWatch() {
 		try {
-			this.watchID = JNotify.addWatch(REQUEST_BASE_PATH, mask, watchSubtree, (JNotifyListener) this);
-			System.err.println("jnotify -----------已启动-----------");
+			this.watchID = JNotify.addWatch(SOURCE_DIR, mask, watchSubtree, (JNotifyListener) this);
+			System.out.println("jnotify -----------已启动-----------");
 		} catch (JNotifyException e) {
 			e.printStackTrace();
 		}
@@ -86,6 +88,7 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 			// TODO: handle exception
 		}
 	}
+	
     public static String lastsub(String str) {
     	int i=str.lastIndexOf("/");
     	return str.substring(0, i);
@@ -93,7 +96,11 @@ public class jNotifyFileTool2 implements  JNotifyListener {
     public static boolean isWindows(){  
         return OS.indexOf("windows")>=0;  
     } 
-    
+    /**
+     * 命令行操作结果
+     * @param cmd
+     * @return
+     */
     public static String getLsof(String[] cmd) {
     	try {
             Process ps = Runtime.getRuntime().exec(cmd);
@@ -118,9 +125,9 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 	 * @param filepath
 	 * @return
 	 */
-	public static  boolean iszhanyong(String filepath) {
+	public static  boolean isOccupied(String filePath) {
 		try {
-		    File file = new File(filepath);
+		    File file = new File(filePath);
 		    if(file.renameTo(file)) {
 		    	return false;
 		    }else {
@@ -129,41 +136,39 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 			
 		} catch (Exception e) {
 			return true;
-		}
-		
+		}	
 	}
-
 	/**
 	 * 拷贝
 	 * @param fileName
 	 * @param pathRoot
 	 */
-	public static void  copyBak(String fileName,String pathRoot ) {
+	public static void  copy(String fileName,String pathRoot ) {
 		String sourceFile=pathRoot+"/"+fileName;
-		String bakFile=BASE_BAK_PATH+"/"+fileName;
-		System.err.println("source file----"+sourceFile);
-		System.err.println("back file------"+bakFile);
+		String destFile=DEST_DIR+"/"+fileName;
+		System.out.println("source file----"+sourceFile);
+		System.out.println("back file------"+destFile);
 		File file1 = new File(sourceFile);
-	    File file2 = new File(bakFile);
+	    File file2 = new File(destFile);
 	    try {
-	    	String childPath=BASE_BAK_PATH+"/"+lastsub(fileName);
-	    	System.err.println("childPath----"+childPath);
+	    	String childPath=DEST_DIR+"/"+lastsub(fileName);
+	    	System.out.println("childPath----"+childPath);
 	    	File filePath=new File(childPath);
 	    	if  (!filePath .exists()  && !filePath .isDirectory())      
 	    	{       
 	    	    filePath .mkdirs();    
 /*	    	    String mkdir="mkdir -p "+childPath;
 	    	    ConfigMapUtil.runShell(mkdir);*/
-	    	    System.err.println("创建目录----"+childPath);
+	    	    System.out.println("创建目录----"+childPath);
 	    	}
 
 	    	boolean isWindows=isWindows();
 		    if(isWindows==true) {
 	        	while(true) {
-	        		boolean flag=iszhanyong(sourceFile);
+	        		boolean flag=isOccupied(sourceFile);
 	        		if(flag==false) {
 	        			JcopyFile(file1, file2);
-	        			if(IS_SOURCE_DEL.equals("1")) {
+	        			if(IS_SOURCE_DEL.equals("0")) {
 	        				String cmd="cmd /c "+"del "+sourceFile;
 	        				try{
 	        			        Runtime.getRuntime().exec(cmd);
@@ -172,8 +177,8 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 	        			    }
 	        				
 	        			}
-						System.err.println("拷贝source file----"+sourceFile);
-						System.err.println("拷贝back file------"+bakFile);
+						System.out.println("拷贝source file----"+sourceFile);
+						System.out.println("拷贝back file------"+destFile);
 						break;
 	        		}else {
 		    			System.out.println(sourceFile+"---被占用继续等待---");
@@ -186,13 +191,13 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 		    		String resturl=getLsof(cmd);
 		    		if(resturl == null || resturl.length() <= 0) {
 						JcopyFile(file1, file2);
-						if(IS_SOURCE_DEL.equals("1")) {
+						if(IS_SOURCE_DEL.equals("0")) {
 							String del="rm -rf "+sourceFile;
 		                    ConfigMapUtil.runShell(del);
-		                    System.err.println("删除源目录文件-----"+del);
+		                    System.out.println("删除源目录文件-----"+del);
 						}
-						System.err.println("拷贝source file----"+sourceFile);
-						System.err.println("拷贝back file------"+bakFile);
+						System.out.println("拷贝source file----"+sourceFile);
+						System.out.println("拷贝back file------"+destFile);
 						break;
 		    		}else {
 		    			System.out.println(sourceFile+"---被占用继续等待---");
@@ -205,18 +210,16 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-
 	}
-
 	/**
 	 * ftp传输
 	 * @param parentPath
 	 * @param path
 	 * @param retries
 	 */
-	 public static void ftpRemote(String parentPath,String path , int retries){
+	 public static void ftpRemote(String parentPath,String localPath , int retries){
 		 if(retries > 3) {
-			 System.err.println("连接失败：重试次数3次！");
+			 System.out.println("连接失败：重试次数3次！");
 			 return;
 		 }
 		 if(ftpClient == null) {
@@ -224,7 +227,7 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 		 }
 		 ftpClient.setControlEncoding("utf-8");
 		 String getParent=parentPath.replace("\\", "/");
-		 String childPath=getParent.substring(REQUEST_BASE_PATH.length());
+		 String childPath=getParent.substring(SOURCE_DIR.length());
 		 System.out.println(childPath+"ftp创建的目录");
 		 try {
 			 if(!ftpClient.isConnected()) {
@@ -263,53 +266,53 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 	    	 System.out.println("当前目录:"+ftpClient.printWorkingDirectory());
 		     boolean isWindows=isWindows();
 			 if(isWindows==true) {
-				String repath=path.replace("/", "\\");
+				String repath=localPath.replace("/", "\\");
  				String cmd="cmd /c "+"del "+repath;
 		         while(true) {
-		        	boolean flag=iszhanyong(path);
+		        	boolean flag=isOccupied(localPath);
 		        	if(flag==false) {
-		   		      File file = new File(path);
+		   		      File file = new File(localPath);
 				      FileInputStream fis = new FileInputStream(file);
 		   		      ftpClient.storeFile(file.getName(), fis);
 		   		      fis.close();
 				      System.out.println(file.getName()+"上传成功");	
 		 			  try{
 		 			   Runtime.getRuntime().exec(cmd);
-		 			  System.err.println("删除源文件-----"+cmd);
+		 			  System.out.println("删除源文件-----"+cmd);
 		 			  }catch(IOException e){
 		 			        e.printStackTrace();
 		 			  }
 				      break;
 		        	}else {
-		    			System.out.println(path+"---被占用继续等待---");
+		    			System.out.println(localPath+"---被占用继续等待---");
 		    			Thread.sleep(1000);
 		        	}
 			    }
 			 }
 			 else {
-				 String del="rm -rf "+path;
-				 String[] cmd = new String[] { "/bin/sh", "-c", " lsof  "+path };
+				 String del="rm -rf "+localPath;
+				 String[] cmd = new String[] { "/bin/sh", "-c", " lsof  "+localPath };
 				 while (true) {
 		        		String resturl=getLsof(cmd);
 		        		if(resturl == null || resturl.length() <= 0) {
-		       		          File file = new File(path);
-		    		          FileInputStream fis = new FileInputStream(file);
-				   		      ftpClient.storeFile(file.getName(), fis);
-				   		      fis.close();
-				   		      System.out.println(file.getName()+"上传成功");	
-			                  ConfigMapUtil.runShell(del);
-			                  System.err.println("删除源文件-----"+del);
-						      
-		    			break;
+		        			File file = new File(localPath);
+		    		        FileInputStream fis = new FileInputStream(file);
+				   		    ftpClient.storeFile(file.getName(), fis);
+				   		    fis.close();
+				   		    System.out.println(file.getName()+"上传成功");	
+				   		    if(IS_SOURCE_DEL.equals("0")){
+				   		    ConfigMapUtil.runShell(del);
+				            System.out.println("删除源文件-----"+del);		       		          
+				   		    }			                  						      
+				   		    break;
 		        		}else {
-		        			System.out.println(path+"---被占用继续等待---");
+		        			System.out.println(localPath+"---被占用继续等待---");
 		        			Thread.sleep(1000);
 		        		}
 			        }
 			 }
 	         //ftpClient.logout();
-			 //System.out.println(ftpClient.changeWorkingDirectory("../"));
-		     
+			 //System.out.println(ftpClient.changeWorkingDirectory("../"));	     
 		 }catch(Exception e) {
 			 e.printStackTrace();
 			 System.out.println("ftp重新连接。。。。。。第"+retries+"次");
@@ -317,16 +320,13 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 			 ftpRemote(parentPath, childPath, ++retries);
 		 } 
 	 }
-	 
-	 
-    
 	
-	public static void startFirstLocal(String parentPath,String path ){  
-		String sourceFile=REQUEST_BASE_PATH+path.substring(REQUEST_BASE_PATH.length());
-		String bakFile=BASE_BAK_PATH+path.substring(REQUEST_BASE_PATH.length());
-        String bakChildPath=BASE_BAK_PATH+parentPath.substring(REQUEST_BASE_PATH.length());
+	public static void startFirstLocal(String parentPath,String localPath ){  
+		String sourceFile=SOURCE_DIR+localPath.substring(SOURCE_DIR.length());
+		String destFile=DEST_DIR+localPath.substring(SOURCE_DIR.length());
+        String bakChildPath=DEST_DIR+parentPath.substring(SOURCE_DIR.length());
 		File file1 = new File(sourceFile);
-	    File file2 = new File(bakFile);
+	    File file2 = new File(destFile);
         try {
         	File filePath=new File(bakChildPath);
 	    	if (!filePath .exists() && !filePath .isDirectory())      
@@ -336,11 +336,11 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 	    	boolean isWindows=isWindows();
 	    if(isWindows==true) {
         	while(true) {
-        		boolean flag=iszhanyong(sourceFile);
+        		boolean flag=isOccupied(sourceFile);
         		if(flag==false) {
         			JcopyFile(file1, file2);
-					System.err.println("拷贝source file----"+sourceFile);
-					System.err.println("拷贝back file------"+bakFile);
+					System.out.println("拷贝source file----"+sourceFile);
+					System.out.println("拷贝back file------"+destFile);
 					break;
         		}else {
 	    			System.out.println(sourceFile+"---被占用继续等待---");
@@ -353,8 +353,8 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 	    		String resturl=getLsof(cmd);
 	    		if(resturl == null || resturl.length() <= 0) {
 					JcopyFile(file1, file2);
-					System.err.println("拷贝source file----"+sourceFile);
-					System.err.println("拷贝back file------"+bakFile);
+					System.out.println("拷贝source file----"+sourceFile);
+					System.out.println("拷贝back file------"+destFile);
 					break;
 	    		}else {
 	    			System.out.println(sourceFile+"---被占用继续等待---");
@@ -400,7 +400,7 @@ public class jNotifyFileTool2 implements  JNotifyListener {
          
 		} catch (Exception e) {
 			//e.printStackTrace();
-			System.err.println(e.getMessage());
+			System.out.println(e.getMessage());
 			
 		} 
 }
@@ -428,7 +428,6 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 		return dirs;
 	}
 	
-	
    public static List<File> getFileSort(String path) {
    	 
        List<File> list = getFiles(path, new ArrayList<File>());
@@ -447,14 +446,10 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 
                }
            });
-
        }
-
        return list;
    }
-
-
-
+   
    public static List<File> getFiles(String realpath, List<File> files) {
 
        File realFile = new File(realpath);
@@ -471,11 +466,6 @@ public class jNotifyFileTool2 implements  JNotifyListener {
        return files;
 
    }
-   
-   
-
-   
- 
 	/**
 	 * 监听文件创建方法重写
 	 */
@@ -488,22 +478,19 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 		File file=new File(rootPath+"/"+filenamecs);
 		String parentPath=lastsub(rootPath+"/"+filenamecs);
 		String path=rootPath+"/"+filenamecs;
-		if(file.isDirectory()||Filename.contains(EXCELUDE_FOLDER)) {
-			System.out.println("空文件夹或是包含排除目录"+EXCELUDE_FOLDER);
+		if(file.isDirectory()||Filename.contains(EXCLUDE_DIR)) {
+			System.out.println("空文件夹或是包含排除目录"+EXCLUDE_DIR);
 			return ;
 		}
 		if(IS_LOCAL.equals("0")) {
-			copyBak(filenamecs,rootPath);
+			copy(filenamecs,rootPath);
 		}
 		if(IS_LOCAL.equals("1")) {
 			ftpRemote(parentPath,path,0);
 		    System.out.println(parentPath+"-------远程传的参数--------"+path);
 		}
-		System.err.println("fileCreated--rootPath " + rootPath);
-		System.err.println("fileCreated--name "  + Filename);
-
-		
-
+		System.out.println("fileCreated--rootPath " + rootPath);
+		System.out.println("fileCreated--name "  + Filename);
 	}
 
 	@Override
@@ -517,18 +504,12 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 		// TODO Auto-generated method stub
 
 		
-		//System.err.println("fileModified, the modified file path is " + rootPath + "/" + name);
+		//System.out.println("fileModified, the modified file path is " + rootPath + "/" + name);
         
 		//copyfile(sourceFile, tagetFile);
 		//renamePic(name,sourePath);
 		//System.out.println("????·????"+sourceFile);
-		//System.err.println("?????????, ????λ????? " +name);
-
-
-	    
-
-		
-		
+		//System.out.println("?????????, ????λ????? " +name);	
 	}
 
 	@Override
@@ -540,23 +521,18 @@ public class jNotifyFileTool2 implements  JNotifyListener {
 		File file=new File(rootPath+"/"+filenamecs);
 		String parentPath=lastsub(rootPath+"/"+filenamecs);
 		String path=rootPath+"/"+filenamecs;
-		if(file.isDirectory()||newName.contains(EXCELUDE_FOLDER)) {
-			System.out.println("空文件夹或是包含排除目录"+EXCELUDE_FOLDER);
+		if(file.isDirectory()||newName.contains(EXCLUDE_DIR)) {
+			System.out.println("空文件夹或是包含排除目录"+EXCLUDE_DIR);
 			return ;
 		}
 		if(IS_LOCAL.equals("0")) {
-			copyBak(filenamecs,rootPath);
+			copy(filenamecs,rootPath);
 		}
 		if(IS_LOCAL.equals("1")) {
 			ftpRemote(parentPath,path,0);
 		    System.out.println(parentPath+"-------远程传的参数--------"+path);
 		}
-		System.err.println("fileCreated--rootPath " + rootPath);
-		System.err.println("fileCreated--name "  + newName);
+		System.out.println("fileCreated--rootPath " + rootPath);
+		System.out.println("fileCreated--name "  + newName);
 	}
-	
-	
-
-
-
 }

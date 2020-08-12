@@ -22,14 +22,11 @@ import net.contentobjects.jnotify.JNotifyListener;
 
 
 public class JNotifyFaceLocal implements  JNotifyListener {
-	private static final String REQUEST_BASE_PATH =ConfigMapUtil.getValueByKey("base.path");
-	private static final String BASE_BAK_PATH =ConfigMapUtil.getValueByKey("base.bakpath");
+	private static final String SOURCE_DIR =ConfigMapUtil.getValueByKey("source.dir");
+	private static final String DEST_DIR =ConfigMapUtil.getValueByKey("dest.dir");
+	private static final String IS_SOURCE_DEL =ConfigMapUtil.getValueByKey("source.delete");
 	private static final String OS = System.getProperty("os.name").toLowerCase();  
 	public static Map<String, String> sourceFtpFileName = new HashMap<String, String>();
-	/**
-	 * 本地原文件路径
-	 */
-	String path = REQUEST_BASE_PATH;
 	/** 
 	 *监控文件被执行的操作:创建，删除，修改，重命名 
 	 */
@@ -41,7 +38,7 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 	public int watchID;
 	
 	static{
-        List<File> list = getFileSort(REQUEST_BASE_PATH);
+        List<File> list = getFileSort(SOURCE_DIR);
         for (File file : list) {
         	boolean isWindows=isWindows();
         	if(isWindows==true) {
@@ -49,8 +46,8 @@ public class JNotifyFaceLocal implements  JNotifyListener {
         	}else {
         		startFirstLocal(file.getParent(),file.getName());
         	}
-        	System.err.println(file.getParent());
-        	System.err.println(file.getName());
+        	System.out.println(file.getParent());
+        	System.out.println(file.getName());
         }
 	 }
 
@@ -66,8 +63,8 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 	 */
 	public void beginWatch() {
 		try {
-			this.watchID = JNotify.addWatch(REQUEST_BASE_PATH, mask, watchSubtree, (JNotifyListener) this);
-			System.err.println("jnotify -----------已启动-----------");
+			this.watchID = JNotify.addWatch(SOURCE_DIR, mask, watchSubtree, (JNotifyListener) this);
+			System.out.println("jnotify -----------已启动-----------");
 		} catch (JNotifyException e) {
 			e.printStackTrace();
 		} try {
@@ -85,9 +82,9 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 	/**
 	 * 文件拷贝
 	 * @param sourceFile
-	 * @param targetFile
+	 * @param destFile
 	 */
-	public static void JcopyFile(File sourceFile,File targetFile){  
+	public static void JcopyFile(File sourceFile,File destFile){  
 		 if(sourceFile.isDirectory()) {
 			 return;
 		 }
@@ -98,7 +95,7 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 		try {
 		   input = new FileInputStream(sourceFile);
            inBuff=new BufferedInputStream(input);  
-           output = new FileOutputStream(targetFile);
+           output = new FileOutputStream(destFile);
            outBuff=new BufferedOutputStream(output);  
 	       byte[] b = new byte[1024 * 4];
 	       int len;  
@@ -125,7 +122,7 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 	    
 	    try{
 	        Runtime.getRuntime().exec(cmd);
-	        System.err.println("cmd:?"+cmd);
+	        System.out.println("cmd:?"+cmd);
 	        
 	    }catch(IOException e){
 	        e.printStackTrace();
@@ -204,9 +201,9 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 	 * @param filepath
 	 * @return
 	 */
-   public static  boolean iszhanyong(String filepath) {
+   public static  boolean isOccupied(String filePath) {
 		try {
-		    File file = new File(filepath);
+		    File file = new File(filePath);
 		    if(file.renameTo(file)) {
 		    	return false;
 		    }else {
@@ -228,17 +225,17 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 		boolean status = fileName.contains("SNAP");
 		boolean status1 = fileName.contains("BACK");
 		if(status) {
-			String targetFileName = lastsub2(fileName);
-			sourceFtpFileName.put(targetFileName.substring(0,targetFileName.indexOf("_")), targetFileName);
+			String destFileName = lastsub2(fileName);
+			sourceFtpFileName.put(destFileName.toString(), destFileName);
 			String sourceFile=parentPath+"/"+fileName;
 			
-			String bakFile=BASE_BAK_PATH+parentPath.substring(REQUEST_BASE_PATH.length())+"/"+fileName;
+			String destFile=DEST_DIR+parentPath.substring(SOURCE_DIR.length())+"/"+fileName;
 
-			String bakChildPath=BASE_BAK_PATH+parentPath.substring(REQUEST_BASE_PATH.length());
+			String destChildPath=DEST_DIR+parentPath.substring(SOURCE_DIR.length());
 			File file1 = new File(sourceFile);
-		    File file2 = new File(bakFile);
+		    File file2 = new File(destFile);
 		    try {
-		       	File filePath=new File(bakChildPath);
+		       	File filePath=new File(destChildPath);
 			    if (!filePath .exists() && !filePath .isDirectory())      
 			    {       
 			    	filePath .mkdirs();    
@@ -248,17 +245,20 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 					String repath=sourceFile.replace("/", "\\");
 	 				String cmd="cmd /c "+"del "+repath;
 			       	while(true) {
-			       		boolean flag=iszhanyong(sourceFile);
+			       		boolean flag=isOccupied(sourceFile);
 			       		if(flag==false) {
 			       			JcopyFile(file1, file2);
-			       			try{
+			       			if(IS_SOURCE_DEL.equals("0")) {
+			       				try{
 					 			  Runtime.getRuntime().exec(cmd);
-					 			  System.err.println("删除源文件-----"+cmd);
-					 		   }catch(IOException e){
+					 			  System.out.println("删除源文件-----"+cmd);
+			       				}catch(IOException e){
 					 			        e.printStackTrace();
-					 		}
-			    			System.err.println("SNAP--"+sourceFile);
-			    			System.err.println("SNAP--"+bakFile);
+			       				}
+			       			}
+			       			
+			    			System.out.println("SNAP--"+sourceFile);
+			    			System.out.println("SNAP--"+destFile);
 								break;
 			       		}else {
 				    			System.out.println(sourceFile+"---被占用继续等待---");
@@ -268,14 +268,16 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 			    }else {
 			    	String del="rm -rf "+sourceFile;
 			    	String[] cmd = new String[] { "/bin/sh", "-c", " lsof  "+sourceFile };
-			    	while (true) {
+			    	while (true) {		   
 			    		String resturl=getLsof(cmd);
 			    		if(resturl == null || resturl.length() <= 0) {
 							JcopyFile(file1, file2);
-			                ConfigMapUtil.runShell(del);
-			                System.err.println("删除源文件-----"+del);
-			    			System.err.println("SNAP--"+sourceFile);
-			    			System.err.println("SNAP--"+bakFile);
+							if(IS_SOURCE_DEL.equals("0")) {
+								 ConfigMapUtil.runShell(del);
+					                System.out.println("删除源文件-----"+del);
+				    		}			               
+			    			System.out.println("SNAP--"+sourceFile);
+			    			System.out.println("SNAP--"+destFile);
 							break;
 			    		}else {
 			    			System.out.println(sourceFile+"---被占用继续等待---");
@@ -292,17 +294,19 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 		}
 		if(status1) {
 			String sourceFile=parentPath+"/"+fileName;
+			String destFileName = lastsub2(fileName);
+			sourceFtpFileName.put(destFileName.toString(), destFileName);
 			if(!sourceFtpFileName.containsKey(fileName.substring(0,fileName.indexOf("_")))) {
 				return;
 			}
 			String newFileName=sourceFtpFileName.get(fileName.substring(0,fileName.indexOf("_")))+"_BACKGROUND.jpg";
-			String bakFile=BASE_BAK_PATH+parentPath.substring(REQUEST_BASE_PATH.length())+"/"+newFileName;
-			System.out.println("target:"+BASE_BAK_PATH+"-----"+bakFile);
-			String bakChildPath=BASE_BAK_PATH+parentPath.substring(REQUEST_BASE_PATH.length());
+			String destFile=DEST_DIR+parentPath.substring(SOURCE_DIR.length())+"/"+ newFileName;
+			System.out.println("target:"+DEST_DIR+"-----"+destFile);
+			String destChildPath=DEST_DIR+parentPath.substring(SOURCE_DIR.length());
 			File file1 = new File(sourceFile);
-		    File file2 = new File(bakFile);
+		    File file2 = new File(destFile);
 		    try {
-		       	File filePath=new File(bakChildPath);
+		       	File filePath=new File(destChildPath);
 			    if (!filePath .exists() && !filePath .isDirectory())      
 			    {       
 			    	filePath .mkdirs();    
@@ -312,17 +316,19 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 					String repath=sourceFile.replace("/", "\\");
 	 				String cmd="cmd /c "+"del "+repath;
 			       	while(true) {
-			       		boolean flag=iszhanyong(sourceFile);
+			       		boolean flag=isOccupied(sourceFile);
 			       		if(flag==false) {
 			       			JcopyFile(file1, file2);
-			       			try{
-					 			  Runtime.getRuntime().exec(cmd);
-					 			  System.err.println("删除源文件-----"+cmd);
-					 		   }catch(IOException e){
-					 			        e.printStackTrace();
-					 		}
-							System.err.println("BACK--"+sourceFile);
-							System.err.println("BACK--"+bakFile);
+			       			if(IS_SOURCE_DEL.equals("0")) {
+			       				try{
+						 			  Runtime.getRuntime().exec(cmd);
+						 			  System.out.println("删除源文件-----"+cmd);
+						 		   }catch(IOException e){
+						 			        e.printStackTrace();
+						 		}
+			       			}			       			
+							System.out.println("BACK--"+sourceFile);
+							System.out.println("BACK--"+destFile);
 								break;
 			       		}else {
 				    			System.out.println(sourceFile+"---被占用继续等待---");
@@ -336,10 +342,12 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 			    		String resturl=getLsof(cmd);
 			    		if(resturl == null || resturl.length() <= 0) {
 							JcopyFile(file1, file2);
-			                ConfigMapUtil.runShell(del);
-			                System.err.println("删除源目录文件-----"+del);
-							System.err.println("BACK--"+sourceFile);
-							System.err.println("BACK--"+bakFile);
+							if(IS_SOURCE_DEL.equals("0")) {
+								ConfigMapUtil.runShell(del);
+				                System.out.println("删除源目录文件-----"+del);
+							}	                
+							System.out.println("BACK--"+sourceFile);
+							System.out.println("BACK--"+destFile);
 							break;
 			    		}else {
 			    			System.out.println(sourceFile+"---被占用继续等待---");
@@ -363,27 +371,27 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 	 * @param fileName
 	 * @param pathRoot
 	 */
-	public static void  copyBak(String fileName,String pathRoot) {
+	public static void  copy(String fileName,String pathRoot) {
 		boolean status = fileName.contains("SNAP");
 		boolean status1 = fileName.contains("BACK");
 		if(status) {
-			String targetFileName = lastsub2(fileName);
-			sourceFtpFileName.put(targetFileName.substring(0,targetFileName.indexOf("_")), targetFileName);
+			String destFileName = lastsub2(fileName);
+			sourceFtpFileName.put(destFileName.toString(), destFileName);
 			String sourceFile=pathRoot+"/"+fileName;
-			String bakFile=BASE_BAK_PATH+"/"+fileName;
-			System.err.println("source file----"+sourceFile);
-			System.err.println("back file------"+bakFile);
+			String destFile=DEST_DIR+"/"+fileName;
+			System.out.println("source file----"+sourceFile);
+			System.out.println("back file------"+destFile);
 			File file1 = new File(sourceFile);
-		    File file2 = new File(bakFile);
+		    File file2 = new File(destFile);
 		    try {
-		    	String childPath=BASE_BAK_PATH+"/"+pathRoot.substring(pathRoot.indexOf(REQUEST_BASE_PATH)+REQUEST_BASE_PATH.length())+fileName.substring(0,fileName.lastIndexOf("/"));
-		    	System.err.println("childPath----"+childPath);
+		    	String childPath=DEST_DIR+"/"+pathRoot.substring(pathRoot.indexOf(SOURCE_DIR)+SOURCE_DIR.length())+fileName.substring(0,fileName.lastIndexOf("/"));
+		    	System.out.println("childPath----"+childPath);
 		    	File filePath=new File(childPath);
 		    	if  (!filePath .exists()  && !filePath .isDirectory())      
 		    	{       
 	/*	    	    String mkdir="mkdir -p "+childPath;
 		    	    ConfigMapUtil.runShell(mkdir);*/
-		    	    System.err.println("创建目录----"+childPath+filePath .mkdirs());
+		    	    System.out.println("创建目录----"+childPath+filePath .mkdirs());
 		    	}
 
 		    	boolean isWindows=isWindows();
@@ -391,17 +399,19 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 					String repath=sourceFile.replace("/", "\\");
 	 				String cmd="cmd /c "+"del "+repath;
 		        	while(true) {
-		        		boolean flag=iszhanyong(sourceFile);
+		        		boolean flag=isOccupied(sourceFile);
 		        		if(flag==false) {
 		        			JcopyFile(file1, file2);
-			       			try{
-					 			  Runtime.getRuntime().exec(cmd);
-					 			  System.err.println("删除源文件-----"+cmd);
-					 		   }catch(IOException e){
-					 			        e.printStackTrace();
-					 		}
-							System.err.println("拷贝source file----"+sourceFile);
-							System.err.println("拷贝back file------"+bakFile);
+		        			if(IS_SOURCE_DEL.equals("0")) {
+		        				try{
+						 			  Runtime.getRuntime().exec(cmd);
+						 			  System.out.println("删除源文件-----"+cmd);
+						 		   }catch(IOException e){
+						 			        e.printStackTrace();
+						 		}
+		        			}		       			
+							System.out.println("拷贝source file----"+sourceFile);
+							System.out.println("拷贝back file------"+destFile);
 							break;
 		        		}else {
 			    			System.out.println(sourceFile+"---被占用继续等待---");
@@ -415,10 +425,12 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 			    		String resturl=getLsof(cmd);
 			    		if(resturl == null || resturl.length() <= 0) {
 							JcopyFile(file1, file2);
-			                ConfigMapUtil.runShell(del);
-			                System.err.println("删除源目录文件-----"+del);
-							System.err.println("拷贝source file----"+sourceFile);
-							System.err.println("拷贝back file------"+bakFile);
+							if(IS_SOURCE_DEL.equals(0)) {
+								ConfigMapUtil.runShell(del);
+				                System.out.println("删除源目录文件-----"+del);
+							}			                
+							System.out.println("拷贝source file----"+sourceFile);
+							System.out.println("拷贝back file------"+destFile);
 							break;
 			    		}else {
 			    			System.out.println(sourceFile+"---被占用继续等待---");
@@ -438,12 +450,12 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 			if(!sourceFtpFileName.containsKey(fileName.substring(0,fileName.indexOf("_")))) {
 				return;
 			}
-			String tagetFile=BASE_BAK_PATH+"/"+sourceFtpFileName.get(fileName.substring(0,fileName.indexOf("_")))+"_BACKGROUND.jpg";
-			System.out.println("target:"+BASE_BAK_PATH+"-----"+tagetFile);
+			String destFile=DEST_DIR+"/"+sourceFtpFileName.get(fileName.substring(0,fileName.indexOf("_")))+"_BACKGROUND.jpg";
+			System.out.println("destination:"+DEST_DIR+"-----"+destFile);
 			File file1 = new File(sourceFile);
-			File file2 = new File(tagetFile);
+			File file2 = new File(destFile);
 			 try {
-			    	String childPath=BASE_BAK_PATH+"/"+pathRoot.substring(pathRoot.indexOf(REQUEST_BASE_PATH)+REQUEST_BASE_PATH.length())+fileName.substring(0,fileName.lastIndexOf("/"));
+			    	String childPath=DEST_DIR+"/"+pathRoot.substring(pathRoot.indexOf(SOURCE_DIR)+SOURCE_DIR.length())+fileName.substring(0,fileName.lastIndexOf("/"));
 			    	System.err.println("childPath----"+childPath);
 			    	File filePath=new File(childPath);
 			    	if  (!filePath .exists()  && !filePath .isDirectory())      
@@ -451,7 +463,7 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 			    	      
 		/*	    	    String mkdir="mkdir -p "+childPath;
 			    	    ConfigMapUtil.runShell(mkdir);*/
-			    	    System.err.println("创建目录----"+childPath+filePath .mkdirs());
+			    	    System.out.println("创建目录----"+childPath+filePath .mkdirs());
 			    	}
 
 			    	boolean isWindows=isWindows();
@@ -459,17 +471,19 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 						String repath=sourceFile.replace("/", "\\");
 		 				String cmd="cmd /c "+"del "+repath;
 			        	while(true) {
-			        		boolean flag=iszhanyong(sourceFile);
+			        		boolean flag=isOccupied(sourceFile);
 			        		if(flag==false) {
 			        			JcopyFile(file1, file2);
-				       			try{
-						 			  Runtime.getRuntime().exec(cmd);
-						 			  System.err.println("删除源文件-----"+cmd);
-						 		   }catch(IOException e){
-						 			        e.printStackTrace();
-						 		}
-								System.err.println("拷贝source file----"+sourceFile);
-								System.err.println("拷贝back file------"+tagetFile);
+			        			if(IS_SOURCE_DEL.equals("0")) {
+			        				try{
+							 			  Runtime.getRuntime().exec(cmd);
+							 			  System.out.println("删除源文件-----"+cmd);
+							 		   }catch(IOException e){
+							 			        e.printStackTrace();
+							 		}
+			        			}				       			
+								System.out.println("拷贝source file----"+sourceFile);
+								System.out.println("拷贝backups file------"+destFile);
 								break;
 			        		}else {
 				    			System.out.println(sourceFile+"---被占用继续等待---");
@@ -483,10 +497,12 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 				    		String resturl=getLsof(cmd);
 				    		if(resturl == null || resturl.length() <= 0) {
 								JcopyFile(file1, file2);
-				                ConfigMapUtil.runShell(del);
-				                System.err.println("删除源目录文件-----"+del);
-								System.err.println("拷贝source file----"+sourceFile);
-								System.err.println("拷贝back file------"+tagetFile);
+								if(IS_SOURCE_DEL.equals("0")) {
+									ConfigMapUtil.runShell(del);
+					                System.out.println("删除源目录文件-----"+del);
+								}				                
+								System.out.println("拷贝source file----"+sourceFile);
+								System.out.println("拷贝backups file------"+destFile);
 								break;
 				    		}else {
 				    			System.out.println(sourceFile+"---被占用继续等待---");
@@ -509,9 +525,9 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 	}
 
 
-   public static List<File> getFiles(String realpath, List<File> files) {
+   public static List<File> getFiles(String realPath, List<File> files) {
 
-       File realFile = new File(realpath);
+       File realFile = new File(realPath);
        if (realFile.isDirectory()) {
            File[] subfiles = realFile.listFiles();
            for (File file : subfiles) {
@@ -534,16 +550,17 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 	 * 监听文件创建方法重写
 	 */
 	@Override
-	public void fileCreated(int wd, String rootPath, String Filename) {
-		String filenamecs=Filename.replace("\\", "/");
+	public void fileCreated(int wd, String rootPath, String fileName) {
+		String filenamecs=fileName.replace("\\", "/");
 		File file=new File(rootPath+"/"+filenamecs);
 		if(file.isDirectory()) {
 			System.out.println("空文件夹");
 			return ;
 		}
-	    copyBak(filenamecs,rootPath);
-		System.err.println("fileCreated--rootPath " + rootPath);
-		System.err.println("fileCreated--name "  + Filename);	
+		//新建文件肯定没有SNAP/BACK，不必运行此函数
+	    copy(filenamecs,rootPath);
+		System.out.println("fileCreated--rootPath " + rootPath);
+		System.out.println("fileCreated--name "  + fileName);	
 
 	}
 
@@ -560,7 +577,7 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 		
 		//System.err.println("fileModified, the modified file path is " + rootPath + "/" + name);
         
-		//copyfile(sourceFile, tagetFile);
+		//copyfile(sourceFile, destFile);
 		//renamePic(name,sourePath);
 		//System.out.println("????·????"+sourceFile);
 		//System.err.println("?????????, ????λ????? " +name);
