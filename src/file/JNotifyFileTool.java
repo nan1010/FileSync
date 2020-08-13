@@ -61,7 +61,6 @@ public class JNotifyFileTool implements JNotifyListener {
 				ftpRemote(file.getParent(), file.getPath(), 0);
 			}
 		}
-
 	}
 
 	public static void main(String[] args) {
@@ -116,7 +115,6 @@ public class JNotifyFileTool implements JNotifyListener {
 			String result = sb.toString();
 			System.out.println("lsof_result:" + result);
 			return result;
-
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -160,7 +158,7 @@ public class JNotifyFileTool implements JNotifyListener {
 		}
 		ftpClient.setControlEncoding("utf-8");
 		String getParent = parentPath.replace("\\", "/");
-		String childPath = getParent.substring(SOURCE_DIR.length() + 1);
+		String childPath = getParent.substring(SOURCE_DIR.length());
 		System.out.println(childPath + "ftp创建的目录");
 		try {
 			if (!ftpClient.isConnected()) {
@@ -368,12 +366,13 @@ public class JNotifyFileTool implements JNotifyListener {
 		 // if(!fileName.endsWith(".jpg")) { return; }
 		  
 		  File file=new File(rootPath+"/"+fileNamecs); String
-		  path=rootPath+"/"+fileNamecs; String parentPath = lastsub(path);
+		  path=rootPath+"/"+fileNamecs; 
+		  String parentPath = lastsub(path);
 		  if(file.isDirectory()||fileNamecs.contains(EXCLUDE_DIR)) {
 			  System.out.println("空文件夹或是包含排除目录"+EXCLUDE_DIR); return ; 
 		  }	
 		  if(IS_LOCAL) { 
-			  copy(rootPath,fileName); 
+			  copy(rootPath,fileNamecs); 
 		  }
 		  else if(!IS_LOCAL) {
 			  ftpRemote(parentPath,path,0);
@@ -432,9 +431,9 @@ public class JNotifyFileTool implements JNotifyListener {
 	 * @param fileName
 	 * @param pathRoot
 	 */
-	public static void copy(String rootPath, String fileName) {
-		String sourceFile = rootPath + "/" + fileName;
-		String destFile = DEST_DIR + "/" + fileName;
+	public static void copy(String rootPath, String fileNamecs) {
+		String sourceFile = rootPath + "/" + fileNamecs;
+		String destFile = DEST_DIR + "/" + fileNamecs;
 		System.out.println("source file----" + sourceFile);
 		System.out.println("destination file------" + destFile);
 		File file1 = new File(sourceFile);
@@ -460,6 +459,8 @@ public class JNotifyFileTool implements JNotifyListener {
 							String cmd = "cmd /c " + "del " +sourceFile.replace("/", "\\"); 
 							try { 
 								Runtime.getRuntime().exec(cmd);
+								//两者有何区别？为什么有时候删除了文件会被占用？
+								//file2.delete();
 								System.out.println("删除源文件----" + sourceFile); 
 						    } catch (IOException e) {
 						    	e.printStackTrace(); 
