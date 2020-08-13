@@ -2,7 +2,15 @@
 <classpath>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.8"/>
 	<classpathentry kind="src" path="src"/>
-	<classpathentry kind="lib" path="lib/jnotify-0.94.jar"/>
-	<classpathentry kind="lib" path="lib/commons-net-2.2.jar" sourcepath="C:/Users/LENOVO/.m2/repository/commons-net/commons-net/2.2/commons-net-2.2-sources.jar"/>
+	<classpathentry kind="lib" path="lib/jnotify-0.94.jar" sourcepath="C:/Users/0380009503/.m2/repository/net/contentobjects/jnotify/jnotify/0.94/jnotify-0.94-sources.jar">
+		<attributes>
+			<attribute name="javadoc_location" value="jar:file:/C:/Users/0380009503/.m2/repository/net/contentobjects/jnotify/jnotify/0.94/jnotify-0.94-javadoc.jar!/"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry kind="lib" path="lib/commons-net-2.2.jar" sourcepath="C:/Users/0380009503/.m2/repository/commons-net/commons-net/2.2/commons-net-2.2-sources.jar">
+		<attributes>
+			<attribute name="javadoc_location" value="jar:file:/C:/Users/0380009503/.m2/repository/commons-net/commons-net/2.2/commons-net-2.2-javadoc.jar!/"/>
+		</attributes>
+	</classpathentry>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

@@ -7,9 +7,13 @@ import org.apache.commons.net.ftp.FTPClient;
 import org.apache.commons.net.ftp.FTPReply;
 
 import java.io.*;
+import java.nio.channels.FileChannel;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.*;
 
-public class jNotifyFileTool implements JNotifyListener {
+public class JNotifyFileTool implements JNotifyListener {
+	
 	private static final String SOURCE_DIR = ConfigMapUtil.getValueByKey("source.dir");
 	private static final String DEST_DIR = ConfigMapUtil.getValueByKey("dest.dir");
 	private static final String FTP_IP = ConfigMapUtil.getValueByKey("ftp.ip");
@@ -23,8 +27,8 @@ public class jNotifyFileTool implements JNotifyListener {
 	 * String REMOTE_USER =ConfigMapUtil.getValueByKey("remote.user"); private
 	 * static final String REMOTE_PORT =ConfigMapUtil.getValueByKey("remote.port");
 	 */
-	private static final String IS_LOCAL = ConfigMapUtil.getValueByKey("isLocal");
-	private static final String IS_SOURCE_DEL = ConfigMapUtil.getValueByKey("source.delete");
+	private static final boolean IS_LOCAL = "0".equals(ConfigMapUtil.getValueByKey("isLocal"));
+	private static final boolean IS_SOURCE_DEL = "0".equals(ConfigMapUtil.getValueByKey("source.delete"));
 	private static final String EXCLUDE_DIR = ConfigMapUtil.getValueByKey("source.dir.exclude");
 	private static final String OS = System.getProperty("os.name").toLowerCase();
 
@@ -44,13 +48,12 @@ public class jNotifyFileTool implements JNotifyListener {
 
 	static {
 		// 本地复制和源删除
-		if (IS_LOCAL.equals("0")) {
+		if (IS_LOCAL && IS_SOURCE_DEL) {
 			List<File> list = getFileSort(SOURCE_DIR);
 			for (File file : list) {
 				startFirstLocal(file.getParent(), file.getPath());
 			}
-		}
-		if (IS_LOCAL.equals("1")) {
+		}else if(!IS_LOCAL) {
 			List<File> list = getFileSort(SOURCE_DIR);
 			for (File file : list) {
 				// String getParent=file.getParent().replace("\\", "/");
@@ -62,7 +65,7 @@ public class jNotifyFileTool implements JNotifyListener {
 	}
 
 	public static void main(String[] args) {
-		new jNotifyFileTool().beginWatch();
+		new JNotifyFileTool().beginWatch();
 	}
 
 	/**
@@ -157,7 +160,7 @@ public class jNotifyFileTool implements JNotifyListener {
 		}
 		ftpClient.setControlEncoding("utf-8");
 		String getParent = parentPath.replace("\\", "/");
-		String childPath = getParent.substring(SOURCE_DIR.length());
+		String childPath = getParent.substring(SOURCE_DIR.length() + 1);
 		System.out.println(childPath + "ftp创建的目录");
 		try {
 			if (!ftpClient.isConnected()) {
@@ -177,22 +180,19 @@ public class jNotifyFileTool implements JNotifyListener {
 			if (!FTPReply.isPositiveCompletion(replyCode)) {
 				System.out.println("connect failed...ftp服务器:" + FTP_IP + ":" + FTP_PORT);
 			}
+			ftpClient.changeWorkingDirectory("/");
 			if (!ftpClient.changeWorkingDirectory("/")) {
 				System.out.println("切换根目录失败，根目录：" + ftpClient.printWorkingDirectory());
 			}
 			System.out.println("根目录：" + ftpClient.printWorkingDirectory());
-			// List<String> list = getPathList(childPath);
-			String[] list = getPathListSz(childPath);
-			// ftp.changeWorkingDirectory("/test");
-			for (int i = 0; i < list.length; i++) {
-				if (!ftpClient.changeWorkingDirectory(list[i])) {// 若路径未存在则创建路径
-					if (!ftpClient.makeDirectory(list[i])) {// 若路径创建失败则不再继续处理
-						System.out.println("create dir fail --> " + list[i]);
-						return;
-					}
-					ftpClient.changeWorkingDirectory(list[i]);
-				}
-			}
+			String[] childPathlist = childPath.split("/"); 
+			// 分层创建目录
+            for (String pa : childPathlist) {
+                System.out.println(pa);
+                ftpClient.makeDirectory(pa);
+                // 切到到对应目录
+                ftpClient.changeWorkingDirectory(pa);
+            }    
 			System.out.println("当前目录:" + ftpClient.printWorkingDirectory());
 			boolean isWindows = isWindows();
 			if (isWindows == true) {
@@ -229,8 +229,8 @@ public class jNotifyFileTool implements JNotifyListener {
 						ftpClient.storeFile(file.getName(), fis);
 						fis.close();
 						System.out.println(file.getName() + "上传成功");
-						if (IS_SOURCE_DEL.equals("0")) {
-							ConfigMapUtil.runShell(del);
+						if (IS_SOURCE_DEL) {
+							ShellUtil.runShell(del);
 							System.out.println("删除源文件-----" + del);
 						}
 						break;
@@ -268,14 +268,12 @@ public class jNotifyFileTool implements JNotifyListener {
 					boolean flag = isOccupied(sourceFile);
 					if (flag == false) {
 						JcopyFile(file1, file2);
-						if (IS_SOURCE_DEL.equals("0")) {
 							try {
 								Runtime.getRuntime().exec(cmd);
 								System.out.println("删除源文件-----" + cmd);
 							} catch (IOException e) {
 								e.printStackTrace();
-							}
-						}
+							}						
 						System.out.println("拷贝source file----" + sourceFile);
 						System.out.println("拷贝destination file------" + destFile);
 						break;
@@ -307,63 +305,17 @@ public class jNotifyFileTool implements JNotifyListener {
 
 	}
 
-	public static void JcopyFile(File sourceFile, File destFile) {
+	public static void JcopyFile(File sourceFile, File destFile) throws IOException {
+		//TODO transferTo
 		if (sourceFile.isDirectory()) {
 			return;
 		}
-		
-		FileInputStream input;
-		FileOutputStream output;
-		BufferedInputStream inBuff;
-		BufferedOutputStream outBuff;
-		try {
-			input = new FileInputStream(sourceFile);
-			inBuff = new BufferedInputStream(input);
-			output = new FileOutputStream(destFile);
-			outBuff = new BufferedOutputStream(output);
-			byte[] b = new byte[1024 * 5];
-			int len;
-			while ((len = inBuff.read(b)) != -1) {
-				outBuff.write(b, 0, len);
-			}
-			outBuff.flush();
-			inBuff.close();
-			outBuff.close();
-			output.close();
-			input.close();
+			FileChannel inChannel = FileChannel.open(Paths.get(sourceFile.getPath()), StandardOpenOption.READ);
+			FileChannel outChannel = FileChannel.open(Paths.get(destFile.getPath()), StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.READ);
+		    inChannel.transferTo(0, inChannel.size(), outChannel);
 			/*
 			 * String cmd="del "+sourceFile.getPath(); exceCmd(cmd);
 			 */
-
-		} catch (Exception e) {
-			// e.printStackTrace();
-			System.out.println(e.getMessage());
-
-		}
-	}
-
-	// 分割路径
-	public static List<String> getPathList(String path) {
-		String[] dirs = path.split("/");
-		List<String> list = new ArrayList<>();
-		String pathname = "";
-		for (String str : dirs) {
-			if (str == null || str.equals("")) {
-				continue;
-			}
-			pathname = pathname + "/" + str;
-			list.add(pathname);
-		}
-		return list;
-	}
-
-	// 分割路径返回数组
-	public static String[] getPathListSz(String path) {
-		String[] dirs = path.split("/");
-		if (dirs.length > 0 && dirs[0].isEmpty()) {
-			return Arrays.copyOfRange(dirs, 1, dirs.length);
-		}
-		return dirs;
 	}
 
 	public static List<File> getFileSort(String path) {
@@ -410,22 +362,23 @@ public class jNotifyFileTool implements JNotifyListener {
 	 */
 	@Override
 	public void fileCreated(int wd, String rootPath, String fileName) {
-		/*
-		 * String fileNamecs=fileName.replace("\\", "/");
-		 * 
-		 * if(!Filename.endsWith(".jpg")) { return; }
-		 * 
-		 * File file=new File(rootPath+"/"+fileNamecs); String
-		 * path=rootPath+"/"+fileNamecs; String parentPath = lastsub(path);
-		 * if(file.isDirectory()||fileNamecs.contains(EXCLUDE_DIR)) {
-		 * System.out.println("空文件夹或是包含排除目录"+EXCLUDE_DIR); return ; }
-		 */
 		
-		/*
-		 * if(IS_LOCAL.equals("0")) { copy(rootPath,fileNamecs); }
-		 * if(IS_LOCAL.equals("1")) { ftpRemote(parentPath,path,0);
-		 * System.out.println(parentPath+"-------远程传的参数--------"+path); }
-		 */
+		  String fileNamecs=fileName.replace("\\", "/");
+		  //只传图像使用该语句
+		 // if(!fileName.endsWith(".jpg")) { return; }
+		  
+		  File file=new File(rootPath+"/"+fileNamecs); String
+		  path=rootPath+"/"+fileNamecs; String parentPath = lastsub(path);
+		  if(file.isDirectory()||fileNamecs.contains(EXCLUDE_DIR)) {
+			  System.out.println("空文件夹或是包含排除目录"+EXCLUDE_DIR); return ; 
+		  }	
+		  if(IS_LOCAL) { 
+			  copy(rootPath,fileName); 
+		  }
+		  else if(!IS_LOCAL) {
+			  ftpRemote(parentPath,path,0);
+			  System.out.println(parentPath+"-------远程传的参数--------"+path); 
+		  }		 
 		  System.out.println("file Created--rootPath " + rootPath);
 		  System.out.println("file Created--name " + fileName);
 		 
@@ -463,10 +416,9 @@ public class jNotifyFileTool implements JNotifyListener {
 			System.out.println("空文件夹或是包含排除目录" + EXCLUDE_DIR);
 			return;
 		}
-		if (IS_LOCAL.equals("0")) {
+		if (IS_LOCAL) {
 			copy(rootPath, filename);
-		}
-		if (IS_LOCAL.equals("1")) {
+		}else{
 			ftpRemote(parentPath, path, 0);
 			System.out.println(parentPath + "-------远程传的参数--------" + path);
 		}
@@ -495,18 +447,24 @@ public class jNotifyFileTool implements JNotifyListener {
 			boolean isWindows = isWindows();
 			if (isWindows == true) {
 				while (true) {
+					//文件是否被占用
 					boolean flag = isOccupied(sourceFile);
 					if (flag == false) {
-						JcopyFile(file1, file2);
-						  if (IS_SOURCE_DEL.equals("0")) { 
-							  String cmd = "cmd /c " + "del " +sourceFile.replace("/", "\\"); 
-							  try { 
-								  Runtime.getRuntime().exec(cmd);
-						  System.out.println("删除源文件----" + sourceFile); 
-						  } catch (IOException e) {
-						  e.printStackTrace(); }
-						  }
-						 
+						/*
+						 * try { JcopyFile(file1, file2); } catch (IOException e) { // TODO: handle
+						 * exception e.printStackTrace(); }
+						 * 这里是否应该写在try/catch语句中
+						 */	
+						JcopyFile(file1, file2); 
+						if (IS_SOURCE_DEL) { 
+							String cmd = "cmd /c " + "del " +sourceFile.replace("/", "\\"); 
+							try { 
+								Runtime.getRuntime().exec(cmd);
+								System.out.println("删除源文件----" + sourceFile); 
+						    } catch (IOException e) {
+						    	e.printStackTrace(); 
+						    	}
+						 }						 
 						System.out.println("拷贝source file----" + sourceFile);
 						System.out.println("拷贝back file------" + destFile);
 						break;
@@ -521,9 +479,9 @@ public class jNotifyFileTool implements JNotifyListener {
 					String resturl = getLsof(cmd);
 					if (resturl == null || resturl.length() <= 0) {
 						JcopyFile(file1, file2);
-						if (IS_SOURCE_DEL.equals("0")) {
+						if (IS_SOURCE_DEL) {
 							String del = "rm -rf " + sourceFile;
-							ConfigMapUtil.runShell(del);
+							ShellUtil.runShell(del);
 							System.out.println("删除源目录文件-----" + del);
 						}
 						System.out.println("拷贝source file----" + sourceFile);
