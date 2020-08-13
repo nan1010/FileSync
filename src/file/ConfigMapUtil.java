@@ -15,7 +15,7 @@ public class ConfigMapUtil {
 	static {
         try {
             //读取文件流
-            InputStream resourceAsStream = Thread.currentThread().getContextClassLoader().getResourceAsStream("config1.properties");
+            InputStream resourceAsStream = Thread.currentThread().getContextClassLoader().getResourceAsStream("config.properties");
             //转变为字符流
             InputStreamReader inputStreamReader = new InputStreamReader(resourceAsStream,"utf-8");
             //创建 Properties 对象
