@@ -47,9 +47,9 @@ public class JNotifyFileTool implements JNotifyListener {
 	boolean watchSubtree = true;
 	/** 监听器Id */
 	public int watchID;
-	
+	/** 最大重连次数 */
 	static int MAX_RETRIES = 3;
-	
+	/** 最大文件被占用的检测次数 */
 	static int MAX_OCCUPIED_RETRIES = 30;
 	
 	static {
@@ -102,18 +102,12 @@ public class JNotifyFileTool implements JNotifyListener {
 	@Override
 	public void fileCreated(int wd, String rootPath, String name) {
 		System.out.println("file Created--rootPath " + rootPath+",name="+name);
-		//添加延时
-		/*fix
-		 * try { Thread.sleep(3000); } catch (InterruptedException e) { // TODO
-		 * Auto-generated catch block e.printStackTrace(); }
-		 */
 		String reletivePath = name.replace("\\", "/");
-			// 只传图像使用该语句
-			if(!adaptSubffix(reletivePath)) {
-				return;
-			}
+			// 文件后缀名检测
+			if(!adaptSubffix(reletivePath))	return;
 			String localPath = rootPath + "/" + reletivePath;
 			File file = new File(localPath);
+			//如果file对象是目录或者包含排除目录，则返回
 			if (file.isDirectory() || reletivePath.contains(EXCLUDE_DIR)) {
 				System.out.println("空文件夹或是包含排除目录" + EXCLUDE_DIR);
 				return;
@@ -150,10 +144,11 @@ public class JNotifyFileTool implements JNotifyListener {
 	public void fileRenamed(int wd, String rootPath, String oldName, String newName) {
 		System.out.println("file Created--rootPath " + rootPath+",newName="+newName+",oldName="+oldName);
 		String reletivePath = newName.replace("\\", "/");
-		// TODO 后缀过滤
-    	if(adaptSubffix(reletivePath)) {
+		// 文件后缀名检测
+    	if(!adaptSubffix(reletivePath))	return; 
     		String localPath = rootPath + "/" + reletivePath;
     		File file = new File(localPath);
+			//如果file对象是目录或者包含排除目录，则返回
     		if (file.isDirectory() || reletivePath.contains(EXCLUDE_DIR)) {
     			System.out.println("空文件夹或是包含排除目录" + EXCLUDE_DIR);
     			return;
@@ -163,14 +158,14 @@ public class JNotifyFileTool implements JNotifyListener {
     		} else {
     			ftpRemote(rootPath,reletivePath, 0);
     		}
-    	}
+    	
 	}
 
 	/**
-	 * 拷贝
+	 * 本地复制
 	 * 
-	 * @param fileName
-	 * @param pathRoot
+	 * @param rootPath	检测文件夹目录
+	 * @param reletivePath	要复制文件的相对路径（含文件名），分隔符为 "/"
 	 */
 	public static void localCopy(String rootPath, String reletivePath) {
 		if(!adaptSubffix(reletivePath))	return;
@@ -181,12 +176,13 @@ public class JNotifyFileTool implements JNotifyListener {
 		File file1 = new File(absolutePath);
 		File file2 = new File(destFile);
 		try {
-			if (!file2.getParentFile().exists()) {
+			if (!file2.getParentFile().exists()) {//如果目标文件的上层目录（多层）不存在，则创建目录
 				file2.getParentFile().mkdirs();
 				System.out.println("创建目录----" + file2.getParent());
 			}
 			int occupiedRetries = 0;
 			while (true) {
+				//判断文件是否被占用，如果没有被占用则执行文件复制，如果被占用则在最高检测次数内持续检测
 				boolean flag = fileIsOccupied(absolutePath);
 				if (!flag) {
 					JcopyFile(file1, file2);
@@ -235,6 +231,7 @@ public class JNotifyFileTool implements JNotifyListener {
 				int replyCode = ftpClient.getReplyCode(); // 是否成功登录服务器
 				if (!FTPReply.isPositiveCompletion(replyCode)) {
 					System.err.println("connect failed...ftp服务器:" + FTP_IP + ":" + FTP_PORT);
+					//断开ftp连接，重新进行ftp传输
 					ftpClient.disconnect();
 					ftpRemote(rootPath,relativePath, ++retries);
 					return;
@@ -245,22 +242,24 @@ public class JNotifyFileTool implements JNotifyListener {
 			}
 			int replyCode = ftpClient.getReplyCode(); // 是否成功登录服务器
 			if (!FTPReply.isPositiveCompletion(replyCode)) {
+				//服务器replyCode值返回异常
 				System.err.println("connect failed...ftp服务器:" + FTP_IP + ":" + FTP_PORT+ ",replyCode="+replyCode);
+				//断开ftp连接，重新进行ftp传输
 				ftpClient.disconnect();
 				ftpRemote(rootPath,relativePath, ++retries);
 				return;
 			}
-			if(!adaptSubffix(relativePath)) {// 传到远程服务器的文件后缀检测
+			if(!adaptSubffix(relativePath)) {// 文件后缀检测
 				return;
 			}
 			ftpClient.setControlEncoding("utf-8");
-			System.out.println("相对路径："+relativePath);
+			System.out.println("相对路径："+relativePath);			
 			if (!ftpClient.changeWorkingDirectory("/")) {
 				System.err.println("切换根目录失败，根目录：" + ftpClient.printWorkingDirectory());
 			}
 			System.out.println("ftp根目录：" + ftpClient.printWorkingDirectory());
-			String[] childPathlist = relativePath.split("/");
 			// 分层创建目录
+			String[] childPathlist = relativePath.split("/");
 			for (int i = 0; i < childPathlist.length - 1; i++) {
 				String dir = childPathlist[i];
 				if(!ftpClient.changeWorkingDirectory(dir)) {//判断目录是否存在
@@ -270,6 +269,7 @@ public class JNotifyFileTool implements JNotifyListener {
 				}
 			}
 			System.out.println("ftp当前目录:" + ftpClient.printWorkingDirectory());
+			//判断文件是否被占用，如果没有被占用则执行文件复制，如果被占用则在最高检测次数内持续检测
 			String absolutePath = rootPath+ "/"+relativePath;
 			int occupiedRetries = 0;
 			while (true) {
@@ -298,7 +298,11 @@ public class JNotifyFileTool implements JNotifyListener {
 			ftpRemote(rootPath,relativePath, ++retries);
 		}
 	}
-	
+	/**
+	 * 检测是否为Windows系统
+	 * 
+	 * @return
+	 */
 	public static boolean isWindows() {
 		return OS.indexOf("windows") >= 0;
 	}
@@ -372,7 +376,12 @@ public class JNotifyFileTool implements JNotifyListener {
 			e.printStackTrace();
 		}
 	}
-	
+	/**
+	 *文件复制
+	 *
+	 * @param sourceFile 源文件路径
+	 * @param destFile 目标文件路径
+	 */
 	public static void JcopyFile(File sourceFile, File destFile) throws IOException {
 		// TODO transferTo
 		if (sourceFile.isDirectory()) {
@@ -385,7 +394,11 @@ public class JNotifyFileTool implements JNotifyListener {
 		outChannel.close();
 		inChannel.close();
 	}
-
+	/**
+	 *文件排序：根据修改时间，保证文件配对的正确性
+	 *
+	 * @param path 文件路径
+	 */
 	public static List<File> getFileSort(String path) {
 		List<File> list = getFiles(path, new ArrayList<File>());
 		if (list != null && list.size() > 0) {
@@ -403,9 +416,13 @@ public class JNotifyFileTool implements JNotifyListener {
 		}
 		return list;
 	}
-
+	/**
+	 *获取文件列表
+	 *
+	 * @param realpath
+	 * @param files
+	 */
 	public static List<File> getFiles(String realpath, List<File> files) {
-
 		File realFile = new File(realpath);
 		if (realFile.isDirectory()) {
 			File[] subfiles = realFile.listFiles();
@@ -418,7 +435,6 @@ public class JNotifyFileTool implements JNotifyListener {
 			}
 		}
 		return files;
-
 	}
 
 }
