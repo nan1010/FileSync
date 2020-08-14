@@ -20,7 +20,7 @@ public class JNotifyFileTool implements JNotifyListener {
 	private static final String FTP_PORT = ConfigMapUtil.getValueByKey("ftp.port");
 	private static final String FTP_USER = ConfigMapUtil.getValueByKey("ftp.user");
 	private static final String FTP_PWD = ConfigMapUtil.getValueByKey("ftp.pwd");
-	private static final String SOURCE_FILE_SUBFIX = ConfigMapUtil.getValueByKey("source.file.subfix");	
+	private static final String SOURCE_FILE_SUFFIX = ConfigMapUtil.getValueByKey("source.file.suffix");	
 
 	/*
 	 * private static final String REMOTE_IP
@@ -48,21 +48,24 @@ public class JNotifyFileTool implements JNotifyListener {
 	/** 监听器Id */
 	public int watchID;
 	
-	static int defaulRetries = 1;
-
+	static int MAX_RETRIES = 3;
+	
+	static int MAX_OCCUPIED_RETRIES = 30;
+	
 	static {
 		// 本地复制和源删除
 		if (IS_LOCAL && IS_SOURCE_DEL) {
 			List<File> list = getFileSort(SOURCE_DIR);
 			for (File file : list) {
-				startFirstLocal(file.getParent(), file.getPath());
+				//startFirstLocal(file.getParent(), file.getPath());
+				localCopy(SOURCE_DIR,file.getPath().replace("\\", "/").replace(SOURCE_DIR+"/", ""));
 			}
 		} else if (!IS_LOCAL) {
 			List<File> list = getFileSort(SOURCE_DIR);
 			for (File file : list) {
 				// String getParent=file.getParent().replace("\\", "/");
 				// String localPath = file.getPath().replace("\\", "/");
-				ftpRemote(file.getPath().replace("\\", "/"), defaulRetries);
+				ftpRemote(SOURCE_DIR,file.getPath().replace("\\", "/").replace(SOURCE_DIR+"/", ""), 0);
 			}
 		}
 	}
@@ -92,56 +95,117 @@ public class JNotifyFileTool implements JNotifyListener {
 		}
 	}
 
-	public static String lastsub(String str) {
-		int i = str.lastIndexOf("/");
-		return str.substring(0, i);
+
+	/**
+	 * 监听文件创建方法重写
+	 */
+	@Override
+	public void fileCreated(int wd, String rootPath, String name) {
+		System.out.println("file Created--rootPath " + rootPath+",name="+name);
+		//添加延时
+		/*fix
+		 * try { Thread.sleep(3000); } catch (InterruptedException e) { // TODO
+		 * Auto-generated catch block e.printStackTrace(); }
+		 */
+		String reletivePath = name.replace("\\", "/");
+			// 只传图像使用该语句
+			if(!adaptSubffix(reletivePath)) {
+				return;
+			}
+			String localPath = rootPath + "/" + reletivePath;
+			File file = new File(localPath);
+			if (file.isDirectory() || reletivePath.contains(EXCLUDE_DIR)) {
+				System.out.println("空文件夹或是包含排除目录" + EXCLUDE_DIR);
+				return;
+			}
+			if (IS_LOCAL) {
+				localCopy(rootPath, reletivePath);
+			} else if (!IS_LOCAL) {
+				ftpRemote(rootPath, reletivePath, 0);
+			}	
+		
+		
 	}
 
-	public static boolean isWindows() {
-		return OS.indexOf("windows") >= 0;
+	@Override
+	public void fileDeleted(int arg0, String arg1, String arg2) {
+		// TODO Auto-generated method stub
+
+	}
+
+	@Override
+	public void fileModified(int arg0, String rootPath, String name) {
+		// TODO Auto-generated method stub
+
+		// System.out.println("fileModified, the modified file path is " + rootPath +
+		// "/" + name);
+
+		// copyfile(sourceFile, tagetFile);
+		// renamePic(name,sourePath);
+		// System.out.println("????·????"+sourceFile);
+		// System.out.println("?????????, ????λ????? " +name);
+	}
+
+	@Override
+	public void fileRenamed(int wd, String rootPath, String oldName, String newName) {
+		System.out.println("file Created--rootPath " + rootPath+",newName="+newName+",oldName="+oldName);
+		String reletivePath = newName.replace("\\", "/");
+		// TODO 后缀过滤
+    	if(adaptSubffix(reletivePath)) {
+    		String localPath = rootPath + "/" + reletivePath;
+    		File file = new File(localPath);
+    		if (file.isDirectory() || reletivePath.contains(EXCLUDE_DIR)) {
+    			System.out.println("空文件夹或是包含排除目录" + EXCLUDE_DIR);
+    			return;
+    		}
+    		if (IS_LOCAL) {
+    			localCopy(rootPath, reletivePath);
+    		} else {
+    			ftpRemote(rootPath,reletivePath, 0);
+    		}
+    	}
 	}
 
 	/**
-	 * 命令行操作结果
+	 * 拷贝
 	 * 
-	 * @param cmd
-	 * @return
+	 * @param fileName
+	 * @param pathRoot
 	 */
-	public static String getLsof(String[] cmd) {
+	public static void localCopy(String rootPath, String reletivePath) {
+		if(!adaptSubffix(reletivePath))	return;
+		String absolutePath = rootPath + "/" + reletivePath;
+		String destFile = DEST_DIR + "/" + reletivePath;
+		System.out.println("source file----" + absolutePath);
+		System.out.println("destination file------" + destFile);
+		File file1 = new File(absolutePath);
+		File file2 = new File(destFile);
 		try {
-			Process ps = Runtime.getRuntime().exec(cmd);
-			BufferedReader br = new BufferedReader(new InputStreamReader(ps.getInputStream()));
-			StringBuffer sb = new StringBuffer();
-			String line;
-			while ((line = br.readLine()) != null) {
-				sb.append(line).append("\n");
+			if (!file2.getParentFile().exists()) {
+				file2.getParentFile().mkdirs();
+				System.out.println("创建目录----" + file2.getParent());
 			}
-			String result = sb.toString();
-			System.out.println("lsof_result:" + result);
-			return result;
+			int occupiedRetries = 0;
+			while (true) {
+				boolean flag = fileIsOccupied(absolutePath);
+				if (!flag) {
+					JcopyFile(file1, file2);
+					if (IS_SOURCE_DEL) {
+						deleteFile(absolutePath);
+					}
+					break;
+				}else {
+					if (occupiedRetries > MAX_OCCUPIED_RETRIES) {
+						break;
+					}
+					System.out.println(absolutePath + "---被占用继续等待---");
+					Thread.sleep(1000);
+					occupiedRetries++;
+				}
+			}
 		} catch (Exception e) {
+			// TODO Auto-generated catch block
 			e.printStackTrace();
-		}
-		return null;
-	}
-
-	/**
-	 * 文件占用判断
-	 * 
-	 * @param filepath
-	 * @return
-	 */
-	public static boolean isOccupied(String filePath) {
-		try {
-			File file = new File(filePath);
-			if (file.renameTo(file)) {
-				return false;
-			} else {
-				return true;
-			}
-
-		} catch (Exception e) {
-			return true;
 		}
 	}
 
@@ -152,10 +216,12 @@ public class JNotifyFileTool implements JNotifyListener {
 	 * @param path
 	 * @param retries
 	 */
-	public static void ftpRemote(String localPath, int retries) {
-		if (retries > 3) {
+	public static void ftpRemote(String rootPath,String relativePath, int retries) {
+		if (retries > MAX_RETRIES) {
 			System.err.println("连接失败：重试次数3次！");
 			return;
+		}else if (retries > 0) {
+			System.out.println("ftp重新连接。。。。。。第" + retries + "次");
 		}
 		if (ftpClient == null) {
 			ftpClient = new FTPClient();
@@ -170,8 +236,7 @@ public class JNotifyFileTool implements JNotifyListener {
 				if (!FTPReply.isPositiveCompletion(replyCode)) {
 					System.err.println("connect failed...ftp服务器:" + FTP_IP + ":" + FTP_PORT);
 					ftpClient.disconnect();
-					System.out.println("ftp重新连接。。。。。。第" + retries + "次");
-					ftpRemote(localPath, ++retries);
+					ftpRemote(rootPath,relativePath, ++retries);
 					return;
 				}
 				ftpClient.setFileType(FTPClient.BINARY_FILE_TYPE);
@@ -180,142 +245,134 @@ public class JNotifyFileTool implements JNotifyListener {
 			}
 			int replyCode = ftpClient.getReplyCode(); // 是否成功登录服务器
 			if (!FTPReply.isPositiveCompletion(replyCode)) {
-				System.err.println("connect failed...ftp服务器:" + FTP_IP + ":" + FTP_PORT);
+				System.err.println("connect failed...ftp服务器:" + FTP_IP + ":" + FTP_PORT+ ",replyCode="+replyCode);
 				ftpClient.disconnect();
-				System.out.println("ftp重新连接。。。。。。第" + retries + "次");
-				ftpRemote(localPath, ++retries);
+				ftpRemote(rootPath,relativePath, ++retries);
+				return;
+			}
+			if(!adaptSubffix(relativePath)) {// 传到远程服务器的文件后缀检测
 				return;
 			}
 			ftpClient.setControlEncoding("utf-8");
-			String parentPath = lastsub(localPath);
-			String childPath = parentPath.substring(SOURCE_DIR.length());
-			System.out.println(childPath + "ftp创建的目录");
+			System.out.println("相对路径："+relativePath);
 			if (!ftpClient.changeWorkingDirectory("/")) {
-				System.out.println("切换根目录失败，根目录：" + ftpClient.printWorkingDirectory());
+				System.err.println("切换根目录失败，根目录：" + ftpClient.printWorkingDirectory());
 			}
-			System.out.println("根目录：" + ftpClient.printWorkingDirectory());
-			String[] childPathlist = childPath.split("/");
+			System.out.println("ftp根目录：" + ftpClient.printWorkingDirectory());
+			String[] childPathlist = relativePath.split("/");
 			// 分层创建目录
-			for (String pa : childPathlist) {
-				if(!ftpClient.changeWorkingDirectory(pa)) {//判断目录是否存在
-					ftpClient.makeDirectory(pa);	
-				}
-				// 切到到对应目录
-				ftpClient.changeWorkingDirectory(pa);
-			}
-			System.out.println("当前目录:" + ftpClient.printWorkingDirectory());
-			boolean isWindows = isWindows();
-			if (isWindows == true) {
-				String repath = localPath.replace("/", "\\");
-				String cmd = "cmd /c " + "del " + repath;
-				while (true) {
-					boolean flag = isOccupied(localPath);
-					if (flag == false) {
-						File file = new File(localPath);
-						FileInputStream fis = new FileInputStream(file);
-						ftpClient.storeFile(file.getName(), fis);
-						fis.close();
-						System.out.println(file.getName() + "上传成功");
-						try {
-							Runtime.getRuntime().exec(cmd);
-							System.out.println("删除源文件-----" + cmd);
-						} catch (IOException e) {
-							e.printStackTrace();
-						}
-						break;
-					} else {
-						System.out.println(localPath + "---被占用继续等待---");
-						Thread.sleep(1000);
-					}
-				}
-			} else {
-				String del = "rm -f " + localPath;
-				String[] cmd = new String[] { "/bin/sh", "-c", " lsof  " + localPath };
-				while (true) {
-					String resturl = getLsof(cmd);
-					if (resturl == null || resturl.length() <= 0) {
-						File file = new File(localPath);
-						FileInputStream fis = new FileInputStream(file);
-						ftpClient.storeFile(file.getName(), fis);
-						fis.close();
-						System.out.println(file.getName() + "上传成功");
-						if (IS_SOURCE_DEL) {
-							ShellUtil.runShell(del);
-							System.out.println("删除源文件-----" + del);
-						}
-						break;
-					} else {
-						System.out.println(localPath + "---被占用继续等待---");
-						Thread.sleep(1000);
-					}
+			for (int i = 0; i < childPathlist.length - 1; i++) {
+				String dir = childPathlist[i];
+				if(!ftpClient.changeWorkingDirectory(dir)) {//判断目录是否存在
+					ftpClient.makeDirectory(dir);
+					// 切到到对应目录
+					ftpClient.changeWorkingDirectory(dir);
 				}
 			}
-			// ftpClient.logout();
-			// System.out.println(ftpClient.changeWorkingDirectory("../"));
+			System.out.println("ftp当前目录:" + ftpClient.printWorkingDirectory());
+			String absolutePath = rootPath+ "/"+relativePath;
+			int occupiedRetries = 0;
+			while (true) {
+				boolean flag = fileIsOccupied(absolutePath);
+				if (!flag) {
+					File file = new File(absolutePath);
+					FileInputStream fis = new FileInputStream(file);
+					ftpClient.storeFile(file.getName(), fis);
+					fis.close();
+					if (IS_SOURCE_DEL) {
+						deleteFile(absolutePath);
+					}
+					break;
+				}else {
+					if (occupiedRetries > MAX_OCCUPIED_RETRIES) {
+						break;
+					}
+					System.out.println(absolutePath + "---被占用继续等待---");
+					Thread.sleep(1000);
+					occupiedRetries++;
+				}
+			}
 		} catch (Exception e) {
 			e.printStackTrace();
-			System.out.println("ftp重新连接。。。。。。第" + retries + "次");
 			ftpClient = new FTPClient();
-			ftpRemote(localPath, ++retries);
+			ftpRemote(rootPath,relativePath, ++retries);
 		}
 	}
-
-	public static void startFirstLocal(String parentPath, String localPath) {
-		String sourceFile = SOURCE_DIR.replace("/", "\\") + localPath.substring(SOURCE_DIR.length());
-		String destFile = DEST_DIR.replace("/", "\\") + localPath.substring(SOURCE_DIR.length());
-		File file1 = new File(sourceFile);
-		File file2 = new File(destFile);
+	
+	public static boolean isWindows() {
+		return OS.indexOf("windows") >= 0;
+	}
+	
+	/**
+	 * 文件后缀检测
+	 * 
+	 * @param reletivePath 文件相对路径
+	 * @return
+	 */
+	public static boolean adaptSubffix(String reletivePath) {
+		String[] sourceFileSuffixList = SOURCE_FILE_SUFFIX.split(",");
+		for(int i = 0; i < sourceFileSuffixList.length;i++){
+			if(reletivePath.endsWith("." + sourceFileSuffixList[i])) {
+				return true;
+			}
+		}
+		return false;	
+	}
+	/**
+	 * 文件占用判断
+	 * 
+	 * @param filepath 文件绝对路径
+	 * @return
+	 */
+	public static boolean fileIsOccupied(String filePath) {
+		boolean flag = true;
 		try {
-			// File filePath = new File(destFile.replace("\\",
-			// "/").substring(0,destFile.indexOf("/")));
-			if (!file2.getParentFile().exists()) {
-				file2.getParentFile().mkdirs();
-			}
-			boolean isWindows = isWindows();
-			if (isWindows == true) {
-
-				String cmd = "cmd /c " + "del " + sourceFile;
-				while (true) {
-					boolean flag = isOccupied(sourceFile);
-					if (flag == false) {
-						JcopyFile(file1, file2);
-						try {
-							Runtime.getRuntime().exec(cmd);
-							System.out.println("删除源文件-----" + cmd);
-						} catch (IOException e) {
-							e.printStackTrace();
-						}
-						System.out.println("拷贝source file----" + sourceFile);
-						System.out.println("拷贝destination file------" + destFile);
-						break;
-					} else {
-						System.out.println(sourceFile + "---被占用继续等待---");
-						Thread.sleep(1000);
-					}
+			if(isWindows()) {
+				File file = new File(filePath);
+				if (file.renameTo(file)) {
+					flag = false;
 				}
-			} else {
-				String[] cmd = new String[] { "/bin/sh", "-c", " lsof  " + sourceFile };
-				while (true) {
-					String resturl = getLsof(cmd);
-					if (resturl == null || resturl.length() <= 0) {
-						JcopyFile(file1, file2);
-						System.out.println("拷贝source file----" + sourceFile);
-						System.out.println("拷贝destination file------" + destFile);
-						break;
-					} else {
-						System.out.println(sourceFile + "---被占用继续等待---");
-						Thread.sleep(2000);
-					}
-
+			}else {
+				String[] cmd = new String[] { "/bin/sh", "-c", " lsof  " + filePath };
+				Process ps = Runtime.getRuntime().exec(cmd);
+				BufferedReader br = new BufferedReader(new InputStreamReader(ps.getInputStream()));
+				StringBuffer sb = new StringBuffer();
+				String line;
+				while ((line = br.readLine()) != null) {
+					sb.append(line).append("\n");
+				}
+				String result = sb.toString();
+				if (result == null || result.length() <= 0) {
+					flag = false;
 				}
 			}
-
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-
+		return flag;
 	}
-
+	
+	/**
+	 * 删除文件
+	 * @param filePath 文件绝对路径
+	 */
+	public static void deleteFile(String filePath) {
+		try {
+			if (isWindows()) {
+				String cmd = "cmd /c " + "del \"" + filePath.replace("/", "\\")+"\"";
+				Runtime.getRuntime().exec(cmd);
+				System.out.println("删除源文件-----" + cmd);
+			}else {
+				String cmd = "rm -f '" + filePath+"'";
+				ShellUtil.runShell(cmd);
+				System.out.println("删除源文件-----" + cmd);
+			}
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	
 	public static void JcopyFile(File sourceFile, File destFile) throws IOException {
 		// TODO transferTo
 		if (sourceFile.isDirectory()) {
@@ -325,9 +382,6 @@ public class JNotifyFileTool implements JNotifyListener {
 		FileChannel outChannel = FileChannel.open(Paths.get(destFile.getPath()), StandardOpenOption.WRITE,
 				StandardOpenOption.CREATE, StandardOpenOption.READ);
 		inChannel.transferTo(0, inChannel.size(), outChannel);
-		/*
-		 * String cmd="del "+sourceFile.getPath(); exceCmd(cmd);
-		 */
 		outChannel.close();
 		inChannel.close();
 	}
@@ -367,154 +421,4 @@ public class JNotifyFileTool implements JNotifyListener {
 
 	}
 
-	/**
-	 * 监听文件创建方法重写
-	 */
-	@Override
-	public void fileCreated(int wd, String rootPath, String fileName) {
-		//添加延时
-		/*
-		 * try { Thread.sleep(3000); } catch (InterruptedException e) { // TODO
-		 * Auto-generated catch block e.printStackTrace(); }
-		 */
-		String fileNamecs = fileName.replace("\\", "/");
-		// 只传图像使用该语句
-		String[] sourceFileSubfixList = SOURCE_FILE_SUBFIX.split(",");
-		for(int i = 0; i < sourceFileSubfixList.length;i++){
-			if(fileName.endsWith(sourceFileSubfixList[i])) {
-				break;
-			}
-			return;
-		}
-		String localPath = rootPath + "/" + fileNamecs;
-		File file = new File(localPath);
-		if (file.isDirectory() || fileNamecs.contains(EXCLUDE_DIR)) {
-			System.out.println("空文件夹或是包含排除目录" + EXCLUDE_DIR);
-			return;
-		}
-		if (IS_LOCAL) {
-			copy(rootPath, fileNamecs);
-		} else if (!IS_LOCAL) {
-			ftpRemote(localPath, defaulRetries);
-			System.out.println(lastsub(localPath) + "-------远程传的参数--------" + localPath);
-		}
-		System.out.println("file Created--rootPath " + rootPath);
-		System.out.println("file Created--name " + fileName);
-
-	}
-
-	@Override
-	public void fileDeleted(int arg0, String arg1, String arg2) {
-		// TODO Auto-generated method stub
-
-	}
-
-	@Override
-	public void fileModified(int arg0, String rootPath, String name) {
-		// TODO Auto-generated method stub
-
-		// System.out.println("fileModified, the modified file path is " + rootPath +
-		// "/" + name);
-
-		// copyfile(sourceFile, tagetFile);
-		// renamePic(name,sourePath);
-		// System.out.println("????·????"+sourceFile);
-		// System.out.println("?????????, ????λ????? " +name);
-	}
-
-	@Override
-	public void fileRenamed(int wd, String rootPath, String oldName, String newName) {
-		String filename = newName.replace("\\", "/");
-		// TODO 后缀过滤
-//		  if (!newName.endsWith(".jpg") || !newName.endsWith(".png")) { return; }
-		String localPath = rootPath + "/" + filename;
-		File file = new File(localPath);
-		if (file.isDirectory() || newName.contains(EXCLUDE_DIR)) {
-			System.out.println("空文件夹或是包含排除目录" + EXCLUDE_DIR);
-			return;
-		}
-		if (IS_LOCAL) {
-			copy(rootPath, filename);
-		} else {
-			ftpRemote(localPath, defaulRetries);
-			System.out.println(lastsub(localPath) + "-------远程传的参数--------" + localPath);
-		}
-		System.out.println("file Renamed--rootPath " + rootPath);
-		System.out.println("file Renamed--name " + newName);
-	}
-
-	/**
-	 * 拷贝
-	 * 
-	 * @param fileName
-	 * @param pathRoot
-	 */
-	public static void copy(String rootPath, String fileNamecs) {
-		String sourceFile = rootPath + "/" + fileNamecs;
-		String destFile = DEST_DIR + "/" + fileNamecs;
-		System.out.println("source file----" + sourceFile);
-		System.out.println("destination file------" + destFile);
-		File file1 = new File(sourceFile);
-		File file2 = new File(destFile);
-		try {
-			if (!file2.getParentFile().exists()) {
-				file2.getParentFile().mkdirs();
-				System.out.println("创建目录----" + file2.getParent());
-			}
-			boolean isWindows = isWindows();
-			if (isWindows == true) {
-				while (true) {
-					// 文件是否被占用
-					boolean flag = isOccupied(sourceFile);
-					if (flag == false) {
-						/*
-						 * try { JcopyFile(file1, file2); } catch (IOException e) { // TODO: handle
-						 * exception e.printStackTrace(); } 这里是否应该写在try/catch语句中
-						 */
-						JcopyFile(file1, file2);
-						if (IS_SOURCE_DEL) {
-							String cmd = "cmd /c " + "del " + sourceFile.replace("/", "\\");
-							try {
-								Runtime.getRuntime().exec(cmd);
-								// 两者有何区别？为什么有时候删除了文件会被占用？
-								// file2.delete();
-								System.out.println("删除源文件----" + sourceFile);
-							} catch (IOException e) {
-								e.printStackTrace();
-							}
-						}
-						System.out.println("拷贝source file----" + sourceFile);
-						System.out.println("拷贝back file------" + destFile);
-						break;
-					} else {
-						System.out.println(sourceFile + "---被占用继续等待---");
-						Thread.sleep(1000);
-					}
-				}
-			} else {
-				String[] cmd = new String[] { "/bin/sh", "-c", " lsof  " + sourceFile };
-				while (true) {
-					String resturl = getLsof(cmd);
-					if (resturl == null || resturl.length() <= 0) {
-						JcopyFile(file1, file2);
-						if (IS_SOURCE_DEL) {
-							String del = "rm -f " + sourceFile;
-							ShellUtil.runShell(del);
-							System.out.println("删除源目录文件-----" + del);
-						}
-						System.out.println("拷贝source file----" + sourceFile);
-						System.out.println("拷贝back file------" + destFile);
-						break;
-					} else {
-						System.out.println(sourceFile + "---被占用继续等待---");
-						Thread.sleep(1000);
-					}
-
-				}
-			}
-		} catch (Exception e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-	}
 }

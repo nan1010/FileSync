@@ -273,7 +273,7 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 			    		if(resturl == null || resturl.length() <= 0) {
 							JcopyFile(file1, file2);
 							if(IS_SOURCE_DEL.equals("0")) {
-								 ConfigMapUtil.runShell(del);
+								 ShellUtil.runShell(del);
 					                System.out.println("删除源文件-----"+del);
 				    		}			               
 			    			System.out.println("SNAP--"+sourceFile);
@@ -343,7 +343,7 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 			    		if(resturl == null || resturl.length() <= 0) {
 							JcopyFile(file1, file2);
 							if(IS_SOURCE_DEL.equals("0")) {
-								ConfigMapUtil.runShell(del);
+								ShellUtil.runShell(del);
 				                System.out.println("删除源目录文件-----"+del);
 							}	                
 							System.out.println("BACK--"+sourceFile);
@@ -426,7 +426,7 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 			    		if(resturl == null || resturl.length() <= 0) {
 							JcopyFile(file1, file2);
 							if(IS_SOURCE_DEL.equals(0)) {
-								ConfigMapUtil.runShell(del);
+								ShellUtil.runShell(del);
 				                System.out.println("删除源目录文件-----"+del);
 							}			                
 							System.out.println("拷贝source file----"+sourceFile);
@@ -498,7 +498,7 @@ public class JNotifyFaceLocal implements  JNotifyListener {
 				    		if(resturl == null || resturl.length() <= 0) {
 								JcopyFile(file1, file2);
 								if(IS_SOURCE_DEL.equals("0")) {
-									ConfigMapUtil.runShell(del);
+									ShellUtil.runShell(del);
 					                System.out.println("删除源目录文件-----"+del);
 								}				                
 								System.out.println("拷贝source file----"+sourceFile);
