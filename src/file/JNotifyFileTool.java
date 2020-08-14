@@ -13,13 +13,15 @@ import java.nio.file.StandardOpenOption;
 import java.util.*;
 
 public class JNotifyFileTool implements JNotifyListener {
-	
+
 	private static final String SOURCE_DIR = ConfigMapUtil.getValueByKey("source.dir");
 	private static final String DEST_DIR = ConfigMapUtil.getValueByKey("dest.dir");
 	private static final String FTP_IP = ConfigMapUtil.getValueByKey("ftp.ip");
 	private static final String FTP_PORT = ConfigMapUtil.getValueByKey("ftp.port");
 	private static final String FTP_USER = ConfigMapUtil.getValueByKey("ftp.user");
 	private static final String FTP_PWD = ConfigMapUtil.getValueByKey("ftp.pwd");
+	private static final String SOURCE_FILE_SUBFIX = ConfigMapUtil.getValueByKey("source.file.subfix");	
+
 	/*
 	 * private static final String REMOTE_IP
 	 * =ConfigMapUtil.getValueByKey("remote.ip"); private static final String
@@ -45,6 +47,8 @@ public class JNotifyFileTool implements JNotifyListener {
 	boolean watchSubtree = true;
 	/** 监听器Id */
 	public int watchID;
+	
+	static int defaulRetries = 1;
 
 	static {
 		// 本地复制和源删除
@@ -53,12 +57,12 @@ public class JNotifyFileTool implements JNotifyListener {
 			for (File file : list) {
 				startFirstLocal(file.getParent(), file.getPath());
 			}
-		}else if(!IS_LOCAL) {
+		} else if (!IS_LOCAL) {
 			List<File> list = getFileSort(SOURCE_DIR);
 			for (File file : list) {
 				// String getParent=file.getParent().replace("\\", "/");
-				// String getPath=file.getPath().replace("\\", "/");
-				ftpRemote(file.getParent(), file.getPath(), 0);
+				// String localPath = file.getPath().replace("\\", "/");
+				ftpRemote(file.getPath().replace("\\", "/"), defaulRetries);
 			}
 		}
 	}
@@ -84,7 +88,7 @@ public class JNotifyFileTool implements JNotifyListener {
 				Thread.sleep(5000);
 			}
 		} catch (Exception e) {
-			// TODO: handle exception
+
 		}
 	}
 
@@ -148,18 +152,14 @@ public class JNotifyFileTool implements JNotifyListener {
 	 * @param path
 	 * @param retries
 	 */
-	public static void ftpRemote(String parentPath, String localPath, int retries) {
+	public static void ftpRemote(String localPath, int retries) {
 		if (retries > 3) {
-			System.out.println("连接失败：重试次数3次！");
+			System.err.println("连接失败：重试次数3次！");
 			return;
 		}
 		if (ftpClient == null) {
 			ftpClient = new FTPClient();
 		}
-		ftpClient.setControlEncoding("utf-8");
-		String getParent = parentPath.replace("\\", "/");
-		String childPath = getParent.substring(SOURCE_DIR.length());
-		System.out.println(childPath + "ftp创建的目录");
 		try {
 			if (!ftpClient.isConnected()) {
 				System.out.println("connecting...ftp服务器:" + FTP_IP + ":" + FTP_PORT);
@@ -168,7 +168,11 @@ public class JNotifyFileTool implements JNotifyListener {
 				ftpClient.setKeepAlive(true);
 				int replyCode = ftpClient.getReplyCode(); // 是否成功登录服务器
 				if (!FTPReply.isPositiveCompletion(replyCode)) {
-					System.out.println("connect failed...ftp服务器:" + FTP_IP + ":" + FTP_PORT);
+					System.err.println("connect failed...ftp服务器:" + FTP_IP + ":" + FTP_PORT);
+					ftpClient.disconnect();
+					System.out.println("ftp重新连接。。。。。。第" + retries + "次");
+					ftpRemote(localPath, ++retries);
+					return;
 				}
 				ftpClient.setFileType(FTPClient.BINARY_FILE_TYPE);
 				// 将客户端设置为被动模式
@@ -176,21 +180,29 @@ public class JNotifyFileTool implements JNotifyListener {
 			}
 			int replyCode = ftpClient.getReplyCode(); // 是否成功登录服务器
 			if (!FTPReply.isPositiveCompletion(replyCode)) {
-				System.out.println("connect failed...ftp服务器:" + FTP_IP + ":" + FTP_PORT);
+				System.err.println("connect failed...ftp服务器:" + FTP_IP + ":" + FTP_PORT);
+				ftpClient.disconnect();
+				System.out.println("ftp重新连接。。。。。。第" + retries + "次");
+				ftpRemote(localPath, ++retries);
+				return;
 			}
-			ftpClient.changeWorkingDirectory("/");
+			ftpClient.setControlEncoding("utf-8");
+			String parentPath = lastsub(localPath);
+			String childPath = parentPath.substring(SOURCE_DIR.length());
+			System.out.println(childPath + "ftp创建的目录");
 			if (!ftpClient.changeWorkingDirectory("/")) {
 				System.out.println("切换根目录失败，根目录：" + ftpClient.printWorkingDirectory());
 			}
 			System.out.println("根目录：" + ftpClient.printWorkingDirectory());
-			String[] childPathlist = childPath.split("/"); 
+			String[] childPathlist = childPath.split("/");
 			// 分层创建目录
-            for (String pa : childPathlist) {
-                System.out.println(pa);
-                ftpClient.makeDirectory(pa);
-                // 切到到对应目录
-                ftpClient.changeWorkingDirectory(pa);
-            }    
+			for (String pa : childPathlist) {
+				if(!ftpClient.changeWorkingDirectory(pa)) {//判断目录是否存在
+					ftpClient.makeDirectory(pa);	
+				}
+				// 切到到对应目录
+				ftpClient.changeWorkingDirectory(pa);
+			}
 			System.out.println("当前目录:" + ftpClient.printWorkingDirectory());
 			boolean isWindows = isWindows();
 			if (isWindows == true) {
@@ -217,7 +229,7 @@ public class JNotifyFileTool implements JNotifyListener {
 					}
 				}
 			} else {
-				String del = "rm -rf " + localPath;
+				String del = "rm -f " + localPath;
 				String[] cmd = new String[] { "/bin/sh", "-c", " lsof  " + localPath };
 				while (true) {
 					String resturl = getLsof(cmd);
@@ -244,7 +256,7 @@ public class JNotifyFileTool implements JNotifyListener {
 			e.printStackTrace();
 			System.out.println("ftp重新连接。。。。。。第" + retries + "次");
 			ftpClient = new FTPClient();
-			ftpRemote(parentPath, childPath, ++retries);
+			ftpRemote(localPath, ++retries);
 		}
 	}
 
@@ -253,25 +265,26 @@ public class JNotifyFileTool implements JNotifyListener {
 		String destFile = DEST_DIR.replace("/", "\\") + localPath.substring(SOURCE_DIR.length());
 		File file1 = new File(sourceFile);
 		File file2 = new File(destFile);
-		try {		
-			//File filePath = new File(destFile.replace("\\", "/").substring(0,destFile.indexOf("/")));
+		try {
+			// File filePath = new File(destFile.replace("\\",
+			// "/").substring(0,destFile.indexOf("/")));
 			if (!file2.getParentFile().exists()) {
 				file2.getParentFile().mkdirs();
 			}
 			boolean isWindows = isWindows();
 			if (isWindows == true) {
-				
+
 				String cmd = "cmd /c " + "del " + sourceFile;
 				while (true) {
 					boolean flag = isOccupied(sourceFile);
 					if (flag == false) {
 						JcopyFile(file1, file2);
-							try {
-								Runtime.getRuntime().exec(cmd);
-								System.out.println("删除源文件-----" + cmd);
-							} catch (IOException e) {
-								e.printStackTrace();
-							}						
+						try {
+							Runtime.getRuntime().exec(cmd);
+							System.out.println("删除源文件-----" + cmd);
+						} catch (IOException e) {
+							e.printStackTrace();
+						}
 						System.out.println("拷贝source file----" + sourceFile);
 						System.out.println("拷贝destination file------" + destFile);
 						break;
@@ -304,24 +317,24 @@ public class JNotifyFileTool implements JNotifyListener {
 	}
 
 	public static void JcopyFile(File sourceFile, File destFile) throws IOException {
-		//TODO transferTo
+		// TODO transferTo
 		if (sourceFile.isDirectory()) {
 			return;
 		}
-			FileChannel inChannel = FileChannel.open(Paths.get(sourceFile.getPath()), StandardOpenOption.READ);
-			FileChannel outChannel = FileChannel.open(Paths.get(destFile.getPath()), StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.READ);
-		    inChannel.transferTo(0, inChannel.size(), outChannel);
-			/*
-			 * String cmd="del "+sourceFile.getPath(); exceCmd(cmd);
-			 */
+		FileChannel inChannel = FileChannel.open(Paths.get(sourceFile.getPath()), StandardOpenOption.READ);
+		FileChannel outChannel = FileChannel.open(Paths.get(destFile.getPath()), StandardOpenOption.WRITE,
+				StandardOpenOption.CREATE, StandardOpenOption.READ);
+		inChannel.transferTo(0, inChannel.size(), outChannel);
+		/*
+		 * String cmd="del "+sourceFile.getPath(); exceCmd(cmd);
+		 */
+		outChannel.close();
+		inChannel.close();
 	}
 
 	public static List<File> getFileSort(String path) {
-
 		List<File> list = getFiles(path, new ArrayList<File>());
-
 		if (list != null && list.size() > 0) {
-
 			Collections.sort(list, new Comparator<File>() {
 				public int compare(File file, File newFile) {
 					if (file.lastModified() < newFile.lastModified()) {
@@ -331,7 +344,6 @@ public class JNotifyFileTool implements JNotifyListener {
 					} else {
 						return -1;
 					}
-
 				}
 			});
 		}
@@ -360,27 +372,35 @@ public class JNotifyFileTool implements JNotifyListener {
 	 */
 	@Override
 	public void fileCreated(int wd, String rootPath, String fileName) {
-		
-		  String fileNamecs=fileName.replace("\\", "/");
-		  //只传图像使用该语句
-		 // if(!fileName.endsWith(".jpg")) { return; }
-		  
-		  File file=new File(rootPath+"/"+fileNamecs); String
-		  path=rootPath+"/"+fileNamecs; 
-		  String parentPath = lastsub(path);
-		  if(file.isDirectory()||fileNamecs.contains(EXCLUDE_DIR)) {
-			  System.out.println("空文件夹或是包含排除目录"+EXCLUDE_DIR); return ; 
-		  }	
-		  if(IS_LOCAL) { 
-			  copy(rootPath,fileNamecs); 
-		  }
-		  else if(!IS_LOCAL) {
-			  ftpRemote(parentPath,path,0);
-			  System.out.println(parentPath+"-------远程传的参数--------"+path); 
-		  }		 
-		  System.out.println("file Created--rootPath " + rootPath);
-		  System.out.println("file Created--name " + fileName);
-		 
+		//添加延时
+		/*
+		 * try { Thread.sleep(3000); } catch (InterruptedException e) { // TODO
+		 * Auto-generated catch block e.printStackTrace(); }
+		 */
+		String fileNamecs = fileName.replace("\\", "/");
+		// 只传图像使用该语句
+		String[] sourceFileSubfixList = SOURCE_FILE_SUBFIX.split(",");
+		for(int i = 0; i < sourceFileSubfixList.length;i++){
+			if(fileName.endsWith(sourceFileSubfixList[i])) {
+				break;
+			}
+			return;
+		}
+		String localPath = rootPath + "/" + fileNamecs;
+		File file = new File(localPath);
+		if (file.isDirectory() || fileNamecs.contains(EXCLUDE_DIR)) {
+			System.out.println("空文件夹或是包含排除目录" + EXCLUDE_DIR);
+			return;
+		}
+		if (IS_LOCAL) {
+			copy(rootPath, fileNamecs);
+		} else if (!IS_LOCAL) {
+			ftpRemote(localPath, defaulRetries);
+			System.out.println(lastsub(localPath) + "-------远程传的参数--------" + localPath);
+		}
+		System.out.println("file Created--rootPath " + rootPath);
+		System.out.println("file Created--name " + fileName);
+
 	}
 
 	@Override
@@ -405,21 +425,19 @@ public class JNotifyFileTool implements JNotifyListener {
 	@Override
 	public void fileRenamed(int wd, String rootPath, String oldName, String newName) {
 		String filename = newName.replace("\\", "/");
-		/*
-		 * if (!newName.endsWith(".jpg")) { return; }
-		 */
-		File file = new File(rootPath + "/" + filename);
-		String path = rootPath + "/" + filename;
-		String parentPath = lastsub(path);
+		// TODO 后缀过滤
+//		  if (!newName.endsWith(".jpg") || !newName.endsWith(".png")) { return; }
+		String localPath = rootPath + "/" + filename;
+		File file = new File(localPath);
 		if (file.isDirectory() || newName.contains(EXCLUDE_DIR)) {
 			System.out.println("空文件夹或是包含排除目录" + EXCLUDE_DIR);
 			return;
 		}
 		if (IS_LOCAL) {
 			copy(rootPath, filename);
-		}else{
-			ftpRemote(parentPath, path, 0);
-			System.out.println(parentPath + "-------远程传的参数--------" + path);
+		} else {
+			ftpRemote(localPath, defaulRetries);
+			System.out.println(lastsub(localPath) + "-------远程传的参数--------" + localPath);
 		}
 		System.out.println("file Renamed--rootPath " + rootPath);
 		System.out.println("file Renamed--name " + newName);
@@ -439,33 +457,32 @@ public class JNotifyFileTool implements JNotifyListener {
 		File file1 = new File(sourceFile);
 		File file2 = new File(destFile);
 		try {
-			if(!file2.getParentFile().exists()) {
+			if (!file2.getParentFile().exists()) {
 				file2.getParentFile().mkdirs();
 				System.out.println("创建目录----" + file2.getParent());
-		}
+			}
 			boolean isWindows = isWindows();
 			if (isWindows == true) {
 				while (true) {
-					//文件是否被占用
+					// 文件是否被占用
 					boolean flag = isOccupied(sourceFile);
 					if (flag == false) {
 						/*
 						 * try { JcopyFile(file1, file2); } catch (IOException e) { // TODO: handle
-						 * exception e.printStackTrace(); }
-						 * 这里是否应该写在try/catch语句中
-						 */	
-						JcopyFile(file1, file2); 
-						if (IS_SOURCE_DEL) { 
-							String cmd = "cmd /c " + "del " +sourceFile.replace("/", "\\"); 
-							try { 
+						 * exception e.printStackTrace(); } 这里是否应该写在try/catch语句中
+						 */
+						JcopyFile(file1, file2);
+						if (IS_SOURCE_DEL) {
+							String cmd = "cmd /c " + "del " + sourceFile.replace("/", "\\");
+							try {
 								Runtime.getRuntime().exec(cmd);
-								//两者有何区别？为什么有时候删除了文件会被占用？
-								//file2.delete();
-								System.out.println("删除源文件----" + sourceFile); 
-						    } catch (IOException e) {
-						    	e.printStackTrace(); 
-						    	}
-						 }						 
+								// 两者有何区别？为什么有时候删除了文件会被占用？
+								// file2.delete();
+								System.out.println("删除源文件----" + sourceFile);
+							} catch (IOException e) {
+								e.printStackTrace();
+							}
+						}
 						System.out.println("拷贝source file----" + sourceFile);
 						System.out.println("拷贝back file------" + destFile);
 						break;
@@ -481,7 +498,7 @@ public class JNotifyFileTool implements JNotifyListener {
 					if (resturl == null || resturl.length() <= 0) {
 						JcopyFile(file1, file2);
 						if (IS_SOURCE_DEL) {
-							String del = "rm -rf " + sourceFile;
+							String del = "rm -f " + sourceFile;
 							ShellUtil.runShell(del);
 							System.out.println("删除源目录文件-----" + del);
 						}
