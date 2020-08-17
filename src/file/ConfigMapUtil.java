@@ -1,14 +1,11 @@
 package file;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Scanner;
-import java.util.concurrent.TimeUnit;
 
 /**
  * @author 
@@ -32,7 +29,7 @@ public class ConfigMapUtil {
             resourceAsStream.close();
             inputStreamReader.close();
             //获取所有key
-            Enumeration enumeration = properties.propertyNames();
+            Enumeration<?> enumeration = properties.propertyNames();
             while (enumeration.hasMoreElements()) {
                 //遍历key
                 String key = (String) enumeration.nextElement();

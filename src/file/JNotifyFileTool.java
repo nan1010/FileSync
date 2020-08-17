@@ -13,15 +13,20 @@ import java.nio.file.StandardOpenOption;
 import java.util.*;
 
 public class JNotifyFileTool implements JNotifyListener {
-
-	private static final String SOURCE_DIR = ConfigMapUtil.getValueByKey("source.dir");
-	private static final String DEST_DIR = ConfigMapUtil.getValueByKey("dest.dir");
-	private static final String FTP_IP = ConfigMapUtil.getValueByKey("ftp.ip");
-	private static final String FTP_PORT = ConfigMapUtil.getValueByKey("ftp.port");
-	private static final String FTP_USER = ConfigMapUtil.getValueByKey("ftp.user");
-	private static final String FTP_PWD = ConfigMapUtil.getValueByKey("ftp.pwd");
-	private static final String SOURCE_FILE_SUFFIX = ConfigMapUtil.getValueByKey("source.file.suffix");
-
+	//本地源文件路径
+	String SOURCE_DIR = null;
+	//本地目标文件路径
+	String DEST_DIR = null;
+	//IP地址
+	String FTP_IP = null;
+	//端口
+	String FTP_PORT = null;
+	//用户名
+	String FTP_USER = null;
+	//密码
+	String FTP_PWD = null;
+	//文件后缀
+    String SOURCE_FILE_SUFFIX = null;
 	/*
 	 * private static final String REMOTE_IP
 	 * =ConfigMapUtil.getValueByKey("remote.ip"); private static final String
@@ -29,31 +34,71 @@ public class JNotifyFileTool implements JNotifyListener {
 	 * String REMOTE_USER =ConfigMapUtil.getValueByKey("remote.user"); private
 	 * static final String REMOTE_PORT =ConfigMapUtil.getValueByKey("remote.port");
 	 */
-	private static final boolean IS_LOCAL = "0".equals(ConfigMapUtil.getValueByKey("isLocal"));
-	private static final boolean IS_SOURCE_DEL = "0".equals(ConfigMapUtil.getValueByKey("source.delete"));
-	private static final boolean IS_INITIALIZE = "0".equals(ConfigMapUtil.getValueByKey("isInitialize"));
-	private static final String EXCLUDE_DIR = ConfigMapUtil.getValueByKey("source.dir.exclude");
-	private static final String OS = System.getProperty("os.name").toLowerCase();
-
-	static FTPClient ftpClient;
-
+    //是否为本地
+	boolean IS_LOCAL = true;
+	//源文件是否删除
+	boolean IS_SOURCE_DEL = true;
+	//是否初始化
+	boolean IS_INITIALIZE = true;
+	//同步排除目录
+	String EXCLUDE_DIR = null;
+	//系统类型检测
+	String OS = null;
+	//FTPClient对象
+	FTPClient ftpClient;
+	
 	// public static String sourceFtpFileName="";
 	// public static String sourceFtpFileName2="";
-	/** 监控目录 */
-	String localPath = SOURCE_DIR;
-	/** 监控事件 */
-	int mask = JNotify.FILE_CREATED | JNotify.FILE_DELETED | JNotify.FILE_MODIFIED | JNotify.FILE_RENAMED;
 
-	/** 是否监控子目录 */
+	//监控事件 
+	int mask = JNotify.FILE_CREATED | JNotify.FILE_DELETED | JNotify.FILE_MODIFIED | JNotify.FILE_RENAMED;
+	//是否监控子目录
 	boolean watchSubtree = true;
-	/** 监听器Id */
+	//监听器Id
 	public int watchID;
-	/** 最大重连次数 */
+	//最大重连次数
 	static int MAX_RETRIES = 3;
-	/** 文件被占用的最大检测次数 */
+	//文件被占用的最大检测次数
 	static int MAX_OCCUPIED_RETRIES = 30;
 
-	static {
+	public static void main(String[] args) {
+		JNotifyFileTool jNotifyFileTool = new JNotifyFileTool();
+		jNotifyFileTool.initiale();
+		jNotifyFileTool.beginWatch();
+	}
+
+	/**
+	 * 启动监听
+	 * 
+	 * @return
+	 */
+	public void beginWatch() {
+		try {
+			String SOURCE_DIR = ConfigMapUtil.getValueByKey("source.dir");
+			this.watchID = JNotify.addWatch(SOURCE_DIR, mask, watchSubtree, (JNotifyListener) this);
+			System.out.println("jnotify -----------已启动-----------");
+		} catch (JNotifyException e) {
+			e.printStackTrace();
+		}
+		try {
+			while (true) {// jnotify监控线程为守护线程，因此主线程不能终止，否则会导致进程退出
+				Thread.sleep(5000);
+			}
+		} catch (Exception e) {
+		}
+	}
+	
+	public void initiale() {	
+		/*
+		 * private static final String REMOTE_IP
+		 * =ConfigMapUtil.getValueByKey("remote.ip"); private static final String
+		 * REMOTE_PWD =ConfigMapUtil.getValueByKey("remote.pwd"); private static final
+		 * String REMOTE_USER =ConfigMapUtil.getValueByKey("remote.user"); private
+		 * static final String REMOTE_PORT =ConfigMapUtil.getValueByKey("remote.port");
+		 */
+		String SOURCE_DIR = ConfigMapUtil.getValueByKey("source.dir");
+		boolean IS_LOCAL = "0".equals(ConfigMapUtil.getValueByKey("isLocal"));
+		boolean IS_INITIALIZE = "0".equals(ConfigMapUtil.getValueByKey("isInitialize"));
 		if(IS_INITIALIZE) {
 			// 本地复制和源删除
 			if (IS_LOCAL) {
@@ -72,31 +117,7 @@ public class JNotifyFileTool implements JNotifyListener {
 			}
 		}	
 	}
-
-	public static void main(String[] args) {
-		new JNotifyFileTool().beginWatch();
-	}
-
-	/**
-	 * 启动监听
-	 * 
-	 * @return
-	 */
-	public void beginWatch() {
-		try {
-			this.watchID = JNotify.addWatch(SOURCE_DIR, mask, watchSubtree, (JNotifyListener) this);
-			System.out.println("jnotify -----------已启动-----------");
-		} catch (JNotifyException e) {
-			e.printStackTrace();
-		}
-		try {
-			while (true) {// jnotify监控线程为守护线程，因此主线程不能终止，否则会导致进程退出
-				Thread.sleep(5000);
-			}
-		} catch (Exception e) {
-		}
-	}
-
+	
 	/**
 	 * 监听文件创建方法重写
 	 * 
@@ -108,16 +129,18 @@ public class JNotifyFileTool implements JNotifyListener {
 	public void fileCreated(int wd, String rootPath, String name) {
 		System.out.println("file Created--rootPath " + rootPath + ",name=" + name);
 		String reletivePath = name.replace("\\", "/");
+		boolean IS_LOCAL = "0".equals(ConfigMapUtil.getValueByKey("isLocal"));
+		String EXCLUDE_DIR = ConfigMapUtil.getValueByKey("source.dir.exclude");
 		// 文件后缀名检测
 		if (!adaptSubffix(reletivePath))
 			return;
 		String localPath = rootPath + "/" + reletivePath;
 		File file = new File(localPath);
-		// 如果file对象是目录或者包含排除目录，则返回
+		// 如果file对象是目录或者包含排除目录，则返回	
 		if (file.isDirectory() || reletivePath.contains(EXCLUDE_DIR)) {
 			System.out.println("空文件夹或是包含排除目录" + EXCLUDE_DIR);
 			return;
-		}
+		}		
 		if (IS_LOCAL) {
 			localCopy(rootPath, reletivePath);
 		} else if (!IS_LOCAL) {
@@ -145,19 +168,21 @@ public class JNotifyFileTool implements JNotifyListener {
 	}
 
 	@Override
-	public void fileRenamed(int wd, String rootPath, String oldName, String newName) {
+	public void fileRenamed(int wd, String rootPath, String oldName, String newName) {		
 		System.out.println("file Created--rootPath " + rootPath + ",newName=" + newName + ",oldName=" + oldName);
 		String reletivePath = newName.replace("\\", "/");
+		boolean IS_LOCAL = "0".equals(ConfigMapUtil.getValueByKey("isLocal"));
+		String EXCLUDE_DIR = ConfigMapUtil.getValueByKey("source.dir.exclude");
 		// 文件后缀名检测
 		if (!adaptSubffix(reletivePath))
 			return;
 		String localPath = rootPath + "/" + reletivePath;
 		File file = new File(localPath);
-		// 如果file对象是目录或者包含排除目录，则返回
+		// 如果file对象是目录或者包含排除目录，则返回	
 		if (file.isDirectory() || reletivePath.contains(EXCLUDE_DIR)) {
 			System.out.println("空文件夹或是包含排除目录" + EXCLUDE_DIR);
 			return;
-		}
+		}	
 		if (IS_LOCAL) {
 			localCopy(rootPath, reletivePath);
 		} else {
@@ -171,7 +196,9 @@ public class JNotifyFileTool implements JNotifyListener {
 	 * @param rootPath     检测文件夹目录
 	 * @param reletivePath 要复制文件的相对路径（含文件名），分隔符为 "/"
 	 */
-	public static void localCopy(String rootPath, String reletivePath) {
+	public void localCopy(String rootPath, String reletivePath) {
+		boolean IS_SOURCE_DEL = "0".equals(ConfigMapUtil.getValueByKey("source.delete"));
+		String DEST_DIR = ConfigMapUtil.getValueByKey("dest.dir");
 		if (!adaptSubffix(reletivePath))
 			return;
 		String absolutePath = rootPath + "/" + reletivePath;
@@ -190,7 +217,7 @@ public class JNotifyFileTool implements JNotifyListener {
 				// 判断文件是否被占用，如果没有被占用则执行文件复制，如果被占用则在最高检测次数内持续检测
 				boolean flag = fileIsOccupied(absolutePath);
 				if (!flag) {
-					JcopyFile(file1, file2);
+					JcopyFile(file1, file2);				
 					if (IS_SOURCE_DEL) {
 						deleteFile(absolutePath);
 					}
@@ -217,7 +244,13 @@ public class JNotifyFileTool implements JNotifyListener {
 	 * @param relativePath 相对路径
 	 * @param retries 服务器重连次数
 	 */
-	public static void ftpRemote(String rootPath, String relativePath, int retries) {
+	public void ftpRemote(String rootPath, String relativePath, int retries) {
+		String FTP_IP = ConfigMapUtil.getValueByKey("ftp.ip");
+		String FTP_PORT = ConfigMapUtil.getValueByKey("ftp.port");
+		String FTP_USER = ConfigMapUtil.getValueByKey("ftp.user");
+		String FTP_PWD = ConfigMapUtil.getValueByKey("ftp.pwd");
+		boolean IS_SOURCE_DEL = "0".equals(ConfigMapUtil.getValueByKey("source.delete"));
+			
 		if (retries > MAX_RETRIES) {
 			System.err.println("连接失败：重试次数3次！");
 			return;
@@ -309,7 +342,8 @@ public class JNotifyFileTool implements JNotifyListener {
 	 * 
 	 * @return
 	 */
-	public static boolean isWindows() {
+	public boolean isWindows() {
+		String OS = System.getProperty("os.name").toLowerCase();
 		return OS.indexOf("windows") >= 0;
 	}
 
@@ -319,7 +353,8 @@ public class JNotifyFileTool implements JNotifyListener {
 	 * @param reletivePath 文件相对路径
 	 * @return
 	 */
-	public static boolean adaptSubffix(String reletivePath) {
+	public boolean adaptSubffix(String reletivePath) {
+		String SOURCE_FILE_SUFFIX = ConfigMapUtil.getValueByKey("source.file.suffix");
 		String[] sourceFileSuffixList = SOURCE_FILE_SUFFIX.split(",");
 		for (int i = 0; i < sourceFileSuffixList.length; i++) {
 			if (reletivePath.endsWith("." + sourceFileSuffixList[i])) {
@@ -335,7 +370,7 @@ public class JNotifyFileTool implements JNotifyListener {
 	 * @param filepath 文件绝对路径
 	 * @return
 	 */
-	public static boolean fileIsOccupied(String filePath) {
+	public boolean fileIsOccupied(String filePath) {
 		boolean flag = true;
 		try {
 			if (isWindows()) {
@@ -368,7 +403,7 @@ public class JNotifyFileTool implements JNotifyListener {
 	 * 
 	 * @param filePath 文件绝对路径
 	 */
-	public static void deleteFile(String filePath) {
+	public void deleteFile(String filePath) {
 		try {
 			if (isWindows()) {
 				String cmd = "cmd /c " + "del \"" + filePath.replace("/", "\\") + "\"";
