@@ -31,6 +31,7 @@ public class JNotifyFileTool implements JNotifyListener {
 	 */
 	private static final boolean IS_LOCAL = "0".equals(ConfigMapUtil.getValueByKey("isLocal"));
 	private static final boolean IS_SOURCE_DEL = "0".equals(ConfigMapUtil.getValueByKey("source.delete"));
+	private static final boolean IS_INITIALIZE = "0".equals(ConfigMapUtil.getValueByKey("isInitialize"));
 	private static final String EXCLUDE_DIR = ConfigMapUtil.getValueByKey("source.dir.exclude");
 	private static final String OS = System.getProperty("os.name").toLowerCase();
 
@@ -49,25 +50,27 @@ public class JNotifyFileTool implements JNotifyListener {
 	public int watchID;
 	/** 最大重连次数 */
 	static int MAX_RETRIES = 3;
-	/** 最大文件被占用的检测次数 */
+	/** 文件被占用的最大检测次数 */
 	static int MAX_OCCUPIED_RETRIES = 30;
 
 	static {
-		// 本地复制和源删除
-		if (IS_LOCAL && IS_SOURCE_DEL) {
-			List<File> list = getFileSort(SOURCE_DIR);
-			for (File file : list) {
-				// startFirstLocal(file.getParent(), file.getPath());
-				localCopy(SOURCE_DIR, file.getPath().replace("\\", "/").replace(SOURCE_DIR + "/", ""));
+		if(IS_INITIALIZE) {
+			// 本地复制和源删除
+			if (IS_LOCAL && IS_SOURCE_DEL) {
+				List<File> list = getFileSort(SOURCE_DIR);
+				for (File file : list) {
+					// startFirstLocal(file.getParent(), file.getPath());
+					localCopy(SOURCE_DIR, file.getPath().replace("\\", "/").replace(SOURCE_DIR + "/", ""));
+				}
+			} else if (!IS_LOCAL) {
+				List<File> list = getFileSort(SOURCE_DIR);
+				for (File file : list) {
+					// String getParent=file.getParent().replace("\\", "/");
+					// String localPath = file.getPath().replace("\\", "/");
+					ftpRemote(SOURCE_DIR, file.getPath().replace("\\", "/").replace(SOURCE_DIR + "/", ""), 0);
+				}
 			}
-		} else if (!IS_LOCAL) {
-			List<File> list = getFileSort(SOURCE_DIR);
-			for (File file : list) {
-				// String getParent=file.getParent().replace("\\", "/");
-				// String localPath = file.getPath().replace("\\", "/");
-				ftpRemote(SOURCE_DIR, file.getPath().replace("\\", "/").replace(SOURCE_DIR + "/", ""), 0);
-			}
-		}
+		}	
 	}
 
 	public static void main(String[] args) {
@@ -96,6 +99,10 @@ public class JNotifyFileTool implements JNotifyListener {
 
 	/**
 	 * 监听文件创建方法重写
+	 * 
+	 * @param wd 监听器ID
+	 * @param rootPath 源文件根路径
+	 * @param name 源文件相对路径
 	 */
 	@Override
 	public void fileCreated(int wd, String rootPath, String name) {
@@ -206,9 +213,9 @@ public class JNotifyFileTool implements JNotifyListener {
 	/**
 	 * ftp传输
 	 * 
-	 * @param parentPath
-	 * @param path
-	 * @param retries
+	 * @param 源文件根路径 
+	 * @param relativePath 相对路径
+	 * @param retries 服务器重连次数
 	 */
 	public static void ftpRemote(String rootPath, String relativePath, int retries) {
 		if (retries > MAX_RETRIES) {
@@ -277,9 +284,7 @@ public class JNotifyFileTool implements JNotifyListener {
 					FileInputStream fis = new FileInputStream(file);
 					ftpClient.storeFile(file.getName(), fis);
 					fis.close();
-					if (IS_SOURCE_DEL) {
-						deleteFile(absolutePath);
-					}
+					deleteFile(absolutePath);					
 					break;
 				} else {
 					if (occupiedRetries > MAX_OCCUPIED_RETRIES) {
@@ -423,8 +428,8 @@ public class JNotifyFileTool implements JNotifyListener {
 	/**
 	 * 获取文件列表
 	 *
-	 * @param realpath
-	 * @param files
+	 * @param realpath 文件路径
+	 * @param files 文件列表
 	 */
 	public static List<File> getFiles(String realpath, List<File> files) {
 		File realFile = new File(realpath);

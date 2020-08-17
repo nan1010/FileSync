@@ -10,6 +10,11 @@ import java.util.Properties;
 import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * @author 
+ *
+ *配置文件读取工具类
+ */
 public class ConfigMapUtil {
 	private static Map<String, String> map = new HashMap<>();
 	static {

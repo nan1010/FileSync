@@ -5,6 +5,11 @@ import java.io.InputStream;
 import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * @author 
+ * 
+ *  Shell工具类
+ */
 public class ShellUtil {
 	public static String runShell(String command) throws IOException {
 		Scanner input = null;
