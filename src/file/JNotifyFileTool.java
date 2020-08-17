@@ -56,7 +56,7 @@ public class JNotifyFileTool implements JNotifyListener {
 	static {
 		if(IS_INITIALIZE) {
 			// 本地复制和源删除
-			if (IS_LOCAL && IS_SOURCE_DEL) {
+			if (IS_LOCAL) {
 				List<File> list = getFileSort(SOURCE_DIR);
 				for (File file : list) {
 					// startFirstLocal(file.getParent(), file.getPath());
@@ -284,7 +284,9 @@ public class JNotifyFileTool implements JNotifyListener {
 					FileInputStream fis = new FileInputStream(file);
 					ftpClient.storeFile(file.getName(), fis);
 					fis.close();
-					deleteFile(absolutePath);					
+					if (IS_SOURCE_DEL) {
+						deleteFile(absolutePath);
+					}				
 					break;
 				} else {
 					if (occupiedRetries > MAX_OCCUPIED_RETRIES) {
