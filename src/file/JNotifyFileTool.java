@@ -63,7 +63,7 @@ public class JNotifyFileTool implements JNotifyListener {
 
 	public static void main(String[] args) {
 		JNotifyFileTool jNotifyFileTool = new JNotifyFileTool();
-		jNotifyFileTool.initiale();
+		jNotifyFileTool.initialize();
 		jNotifyFileTool.beginWatch();
 	}
 
@@ -88,7 +88,7 @@ public class JNotifyFileTool implements JNotifyListener {
 		}
 	}
 	
-	public void initiale() {	
+	public void initialize() {	
 		/*
 		 * private static final String REMOTE_IP
 		 * =ConfigMapUtil.getValueByKey("remote.ip"); private static final String
@@ -96,25 +96,36 @@ public class JNotifyFileTool implements JNotifyListener {
 		 * String REMOTE_USER =ConfigMapUtil.getValueByKey("remote.user"); private
 		 * static final String REMOTE_PORT =ConfigMapUtil.getValueByKey("remote.port");
 		 */
-		String SOURCE_DIR = ConfigMapUtil.getValueByKey("source.dir");
-		boolean IS_LOCAL = "0".equals(ConfigMapUtil.getValueByKey("isLocal"));
-		boolean IS_INITIALIZE = "0".equals(ConfigMapUtil.getValueByKey("isInitialize"));
+		SOURCE_DIR = ConfigMapUtil.getValueByKey("source.dir");
+		IS_LOCAL = "0".equals(ConfigMapUtil.getValueByKey("isLocal"));
+		IS_INITIALIZE = "0".equals(ConfigMapUtil.getValueByKey("isInitialize"));
+		SOURCE_FILE_SUFFIX = ConfigMapUtil.getValueByKey("source.file.suffix");
+		EXCLUDE_DIR = ConfigMapUtil.getValueByKey("source.dir.exclude");
+		IS_SOURCE_DEL = "0".equals(ConfigMapUtil.getValueByKey("source.delete"));
+		DEST_DIR = ConfigMapUtil.getValueByKey("dest.dir");
+
+		FTP_IP = ConfigMapUtil.getValueByKey("ftp.ip");
+		FTP_PORT = ConfigMapUtil.getValueByKey("ftp.port");
+		FTP_USER = ConfigMapUtil.getValueByKey("ftp.user");
+		FTP_PWD = ConfigMapUtil.getValueByKey("ftp.pwd");
+		OS = System.getProperty("os.name").toLowerCase();
+		
 		if(IS_INITIALIZE) {
 			// 本地复制和源删除
-			if (IS_LOCAL) {
-				List<File> list = getFileSort(SOURCE_DIR);
-				for (File file : list) {
-					// startFirstLocal(file.getParent(), file.getPath());
-					localCopy(SOURCE_DIR, file.getPath().replace("\\", "/").replace(SOURCE_DIR + "/", ""));
-				}
-			} else if (!IS_LOCAL) {
-				List<File> list = getFileSort(SOURCE_DIR);
-				for (File file : list) {
-					// String getParent=file.getParent().replace("\\", "/");
-					// String localPath = file.getPath().replace("\\", "/");
-					ftpRemote(SOURCE_DIR, file.getPath().replace("\\", "/").replace(SOURCE_DIR + "/", ""), 0);
-				}
+			System.out.println("----------------------------初始化同步文件 开始---");
+			List<File> list = getFileSort(SOURCE_DIR);
+			for (File file : list) {
+				// startFirstLocal(file.getParent(), file.getPath());
+				//过滤后缀
+				if(adaptSubffix(file.getPath().replace("\\", "/").replace(SOURCE_DIR + "/", ""))) {
+					if (IS_LOCAL) {	
+						localCopy(SOURCE_DIR, file.getPath().replace("\\", "/").replace(SOURCE_DIR + "/", ""));
+					} else {
+						ftpRemote(SOURCE_DIR, file.getPath().replace("\\", "/").replace(SOURCE_DIR + "/", ""), 0);
+					}	
+				}	
 			}
+			System.out.println("----------------------------初始化同步文件 结束---");
 		}	
 	}
 	
@@ -127,10 +138,8 @@ public class JNotifyFileTool implements JNotifyListener {
 	 */
 	@Override
 	public void fileCreated(int wd, String rootPath, String name) {
-		System.out.println("file Created--rootPath " + rootPath + ",name=" + name);
+		System.out.println("----------------------------file Created--rootPath " + rootPath + ",name=" + name);
 		String reletivePath = name.replace("\\", "/");
-		boolean IS_LOCAL = "0".equals(ConfigMapUtil.getValueByKey("isLocal"));
-		String EXCLUDE_DIR = ConfigMapUtil.getValueByKey("source.dir.exclude");
 		// 文件后缀名检测
 		if (!adaptSubffix(reletivePath))
 			return;
@@ -169,10 +178,8 @@ public class JNotifyFileTool implements JNotifyListener {
 
 	@Override
 	public void fileRenamed(int wd, String rootPath, String oldName, String newName) {		
-		System.out.println("file Created--rootPath " + rootPath + ",newName=" + newName + ",oldName=" + oldName);
+		System.out.println("----------------------------file Created--rootPath " + rootPath + ",newName=" + newName + ",oldName=" + oldName);
 		String reletivePath = newName.replace("\\", "/");
-		boolean IS_LOCAL = "0".equals(ConfigMapUtil.getValueByKey("isLocal"));
-		String EXCLUDE_DIR = ConfigMapUtil.getValueByKey("source.dir.exclude");
 		// 文件后缀名检测
 		if (!adaptSubffix(reletivePath))
 			return;
@@ -197,8 +204,6 @@ public class JNotifyFileTool implements JNotifyListener {
 	 * @param reletivePath 要复制文件的相对路径（含文件名），分隔符为 "/"
 	 */
 	public void localCopy(String rootPath, String reletivePath) {
-		boolean IS_SOURCE_DEL = "0".equals(ConfigMapUtil.getValueByKey("source.delete"));
-		String DEST_DIR = ConfigMapUtil.getValueByKey("dest.dir");
 		if (!adaptSubffix(reletivePath))
 			return;
 		String absolutePath = rootPath + "/" + reletivePath;
@@ -244,13 +249,7 @@ public class JNotifyFileTool implements JNotifyListener {
 	 * @param relativePath 相对路径
 	 * @param retries 服务器重连次数
 	 */
-	public void ftpRemote(String rootPath, String relativePath, int retries) {
-		String FTP_IP = ConfigMapUtil.getValueByKey("ftp.ip");
-		String FTP_PORT = ConfigMapUtil.getValueByKey("ftp.port");
-		String FTP_USER = ConfigMapUtil.getValueByKey("ftp.user");
-		String FTP_PWD = ConfigMapUtil.getValueByKey("ftp.pwd");
-		boolean IS_SOURCE_DEL = "0".equals(ConfigMapUtil.getValueByKey("source.delete"));
-			
+	public void ftpRemote(String rootPath, String relativePath, int retries) {	
 		if (retries > MAX_RETRIES) {
 			System.err.println("连接失败：重试次数3次！");
 			return;
@@ -259,6 +258,8 @@ public class JNotifyFileTool implements JNotifyListener {
 		}
 		if (ftpClient == null) {
 			ftpClient = new FTPClient();
+			//ftp中文编码设置
+			ftpClient.setControlEncoding("UTF8");
 		}
 		try {
 			if (!ftpClient.isConnected()) {
@@ -285,9 +286,6 @@ public class JNotifyFileTool implements JNotifyListener {
 				// 断开ftp连接，重新进行ftp传输
 				ftpClient.disconnect();
 				ftpRemote(rootPath, relativePath, ++retries);
-				return;
-			}
-			if (!adaptSubffix(relativePath)) {// 文件后缀检测
 				return;
 			}
 			ftpClient.setControlEncoding("utf-8");
@@ -343,7 +341,6 @@ public class JNotifyFileTool implements JNotifyListener {
 	 * @return
 	 */
 	public boolean isWindows() {
-		String OS = System.getProperty("os.name").toLowerCase();
 		return OS.indexOf("windows") >= 0;
 	}
 
@@ -354,7 +351,8 @@ public class JNotifyFileTool implements JNotifyListener {
 	 * @return
 	 */
 	public boolean adaptSubffix(String reletivePath) {
-		String SOURCE_FILE_SUFFIX = ConfigMapUtil.getValueByKey("source.file.suffix");
+		if(SOURCE_FILE_SUFFIX.equals(""))	
+			return true;
 		String[] sourceFileSuffixList = SOURCE_FILE_SUFFIX.split(",");
 		for (int i = 0; i < sourceFileSuffixList.length; i++) {
 			if (reletivePath.endsWith("." + sourceFileSuffixList[i])) {
