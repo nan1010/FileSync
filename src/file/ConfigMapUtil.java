@@ -1,11 +1,15 @@
 package file;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+
+import org.omg.PortableInterceptor.USER_EXCEPTION;
 
 /**
  * @author 
@@ -16,8 +20,19 @@ public class ConfigMapUtil {
 	private static Map<String, String> map = new HashMap<>();
 	static {
         try {
-            //读取文件流
-            InputStream resourceAsStream = Thread.currentThread().getContextClassLoader().getResourceAsStream("config.properties");
+        	//读取文件流
+        	InputStream resourceAsStream = null;
+        	//运行jar包的路径 pathString
+        	String pathString = JNotifyFileTool.class.getProtectionDomain().getCodeSource().getLocation().getPath();
+        	File outerFile = new File(pathString.substring(0, pathString.lastIndexOf("/"))+ "/config.properties");
+        	if(outerFile.exists()) {
+        		System.out.println("外部配置文件存在：" + outerFile.getAbsolutePath());
+        		resourceAsStream = new FileInputStream(outerFile);
+        	} else {
+        		System.out.println("使用默认配置文件：" );
+        		resourceAsStream = Thread.currentThread().getContextClassLoader().getResourceAsStream("config.properties");
+        	}
+        	
             //转变为字符流
             InputStreamReader inputStreamReader = new InputStreamReader(resourceAsStream,"utf-8");
             //创建 Properties 对象
