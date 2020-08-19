@@ -9,8 +9,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 
-import org.omg.PortableInterceptor.USER_EXCEPTION;
-
 /**
  * @author 
  *
@@ -31,8 +29,7 @@ public class ConfigMapUtil {
         	} else {
         		System.out.println("使用默认配置文件：" );
         		resourceAsStream = Thread.currentThread().getContextClassLoader().getResourceAsStream("config.properties");
-        	}
-        	
+        	}      	
             //转变为字符流
             InputStreamReader inputStreamReader = new InputStreamReader(resourceAsStream,"utf-8");
             //创建 Properties 对象
