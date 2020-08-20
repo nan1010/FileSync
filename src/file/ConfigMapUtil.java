@@ -20,9 +20,7 @@ public class ConfigMapUtil {
         try {
         	//读取文件流
         	InputStream resourceAsStream = null;
-        	//运行jar包的路径 pathString
-        	String pathString = JNotifyFileTool.class.getProtectionDomain().getCodeSource().getLocation().getPath();
-        	File outerFile = new File(pathString.substring(0, pathString.lastIndexOf("/"))+ "/config.properties");
+        	File outerFile = new File("config.properties");
         	if(outerFile.exists()) {
         		System.out.println("外部配置文件存在：" + outerFile.getAbsolutePath());
         		resourceAsStream = new FileInputStream(outerFile);
