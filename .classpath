@@ -8,5 +8,6 @@
 		</attributes>
 	</classpathentry>
 	<classpathentry kind="lib" path="C:/Users/0380009503/.m2/repository/commons-net/commons-net/3.7/commons-net-3.7.jar" sourcepath="C:/Users/0380009503/.m2/repository/commons-net/commons-net/3.7/commons-net-3.7-sources.jar"/>
+	<classpathentry kind="lib" path="lib/sqlite-jdbc-3.7.2.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
