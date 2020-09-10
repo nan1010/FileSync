@@ -46,7 +46,7 @@ public class JNotifyFileTool implements JNotifyListener {
 	// FTPClient对象
 	FTPClient ftpClient;
 	Lock lock = new ReentrantLock();
-	int ii;	
+	//int ii;	
 
 	// public static String sourceFtpFileName="";
 	// public static String sourceFtpFileName2="";
@@ -222,10 +222,10 @@ public class JNotifyFileTool implements JNotifyListener {
 			int occupiedRetries = 0;			
 			while (true) {
 				// 判断文件是否被占用，如果没有被占用则执行文件复制，如果被占用则在最高检测次数内持续检测
-				//boolean flag = fileIsOccupied(absolutePath);
-				boolean flag = true;				
-				ii++;
-				if(ii == 3) flag = false;
+				boolean flag = fileIsOccupied(absolutePath);
+				//boolean flag = true;				
+				//ii++;
+				//if(ii == 3) flag = false;
 				// 如果没有被占用，执行复制、删除操作
 				if (!flag) {
 					JcopyFile(file1, file2);
