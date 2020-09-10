@@ -383,9 +383,7 @@ public class JNotifyFileTool implements JNotifyListener {
 		// 每隔10分钟循环调用线程
 		Thread thread = new Thread(new HandlerIfOccupied());	
 		thread.start();			
-	}
-	
-
+	}	
 	// 线程每隔10分钟遍历sqlite数据表中被占用的文件名，试图重新复制、传输其中解除占用的文件
 	class HandlerIfOccupied implements Runnable {
 
