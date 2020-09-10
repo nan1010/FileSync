@@ -6,9 +6,9 @@ import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
 
 /**
- * @author 
+ * @author
  * 
- *  Shell工具类
+ *         Shell工具类
  */
 public class ShellUtil {
 	public static String runShell(String command) throws IOException {
@@ -18,7 +18,7 @@ public class ShellUtil {
 		try {
 			process = Runtime.getRuntime().exec(command);
 			try {
-				//等待命令执行完成
+				// 等待命令执行完成
 				process.waitFor(10, TimeUnit.SECONDS);
 			} catch (InterruptedException e) {
 				e.printStackTrace();
@@ -28,7 +28,7 @@ public class ShellUtil {
 			while (input.hasNextLine()) {
 				result += input.nextLine() + "\n";
 			}
-			result = command + "\n" + result; //加上命令本身，打印出来
+			result = command + "\n" + result; // 加上命令本身，打印出来
 		} finally {
 			if (input != null) {
 				input.close();
@@ -39,15 +39,15 @@ public class ShellUtil {
 		}
 		return result;
 	}
-    
-    public static String run(String[] command) throws IOException {
+
+	public static String run(String[] command) throws IOException {
 		Scanner input = null;
 		String result = "";
 		Process process = null;
 		try {
 			process = Runtime.getRuntime().exec(command);
 			try {
-				//等待命令执行完成
+				// 等待命令执行完成
 				process.waitFor(10, TimeUnit.SECONDS);
 			} catch (InterruptedException e) {
 				e.printStackTrace();
@@ -57,7 +57,7 @@ public class ShellUtil {
 			while (input.hasNextLine()) {
 				result += input.nextLine() + "\n";
 			}
-			result = command + "\n" + result; //加上命令本身，打印出来
+			result = command + "\n" + result; // 加上命令本身，打印出来
 		} finally {
 			if (input != null) {
 				input.close();
