@@ -13,6 +13,7 @@ import java.nio.file.StandardOpenOption;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.*;
 
@@ -41,12 +42,14 @@ public class JNotifyFileTool implements JNotifyListener {
 	String EXCLUDE_DIR = null;
 	// 系统类型检测
 	String OS = null;
+	// 最大重试次数
+	Integer MAX_RETRIES = null;
 	// FTPClient对象
 	FTPClient ftpClient;
-	
+
 //	Lock lock = new ReentrantLock();
-	
-	//测试被占用状态
+
+	// 测试被占用状态
 	int ii;
 
 	// public static String sourceFtpFileName="";
@@ -58,10 +61,6 @@ public class JNotifyFileTool implements JNotifyListener {
 	boolean watchSubtree = true;
 	// 监听器Id
 	public int watchID;
-	// 最大重连次数
-	static int MAX_RETRIES = 3;
-	// 文件被占用的最大检测次数 - 1
-	static int MAX_OCCUPIED_RETRIES = 0;
 	// sqlite数据库连接对象
 	private static Connection conn;
 
@@ -70,10 +69,9 @@ public class JNotifyFileTool implements JNotifyListener {
 		// 初始化sqlite数据库，建立连接、创建表，用于存放被占用文件名
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:test.db");
+			conn = DriverManager.getConnection("jdbc:sqlite:data.db");
 			Statement stat = conn.createStatement();
-			stat.executeUpdate("drop table if exists tbl1;");
-			stat.executeUpdate("create table if not exists tbl1(rootPath varchar(80),relativePath varchar(80));");
+			stat.executeUpdate("create table if not exists tbl1(rootPath varchar(80),relativePath varchar(200));");
 			stat.close();
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -115,22 +113,26 @@ public class JNotifyFileTool implements JNotifyListener {
 		FTP_PORT = ConfigMapUtil.getValueByKey("ftp.port");
 		FTP_USER = ConfigMapUtil.getValueByKey("ftp.user");
 		FTP_PWD = ConfigMapUtil.getValueByKey("ftp.pwd");
+		MAX_RETRIES = Integer.parseInt(ConfigMapUtil.getValueByKey("maxReties"));
 		OS = System.getProperty("os.name").toLowerCase();
 
 		if (IS_INITIALIZE) {
 			// 本地复制和源删除
 			System.out.println("----------------------------初始化同步文件 开始---");
 			List<File> list = getFileSort(SOURCE_DIR);
-			for (File file : list) {
-				// startFirstLocal(file.getParent(), file.getPath());
-				// 过滤后缀
-				if (adaptSubffix(file.getPath().replace("\\", "/").replace(SOURCE_DIR + "/", ""))) {
-					if (IS_LOCAL) {
-						localCopy(SOURCE_DIR, file.getPath().replace("\\", "/").replace(SOURCE_DIR + "/", ""));
-					} else {
-						ftpRemote(SOURCE_DIR, file.getPath().replace("\\", "/").replace(SOURCE_DIR + "/", ""), 0);
+			for (File file : list) {				
+				String relativePath = file.getPath().replace("\\", "/").replace(SOURCE_DIR + "/", "");
+				Boolean result = fileCopy(SOURCE_DIR, relativePath);
+				if (result != null && result) {
+					Statement stat = null;
+					try {
+						 stat = conn.createStatement();
+					} catch (SQLException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
 					}
-				}
+					sqliteDelete(stat, SOURCE_DIR, relativePath);
+				}				
 			}
 			System.out.println("----------------------------初始化同步文件 结束---");
 		}
@@ -147,21 +149,7 @@ public class JNotifyFileTool implements JNotifyListener {
 	public void fileCreated(int wd, String rootPath, String name) {
 		System.out.println("----------------------------file Created--rootPath " + rootPath + ",name=" + name);
 		String reletivePath = name.replace("\\", "/");
-		// 文件后缀名检测
-		if (!adaptSubffix(reletivePath))
-			return;
-		String localPath = rootPath + "/" + reletivePath;
-		File file = new File(localPath);
-		// 如果file对象是目录或者包含排除目录，则返回
-		if (file.isDirectory() || reletivePath.contains(EXCLUDE_DIR)) {
-			System.out.println("空文件夹或是包含排除目录" + EXCLUDE_DIR);
-			return;
-		}
-		if (IS_LOCAL) {
-			localCopy(rootPath, reletivePath);
-		} else if (!IS_LOCAL) {
-			ftpRemote(rootPath, reletivePath, 0);
-		}
+		fileCopy(rootPath, reletivePath);
 	}
 
 	@Override
@@ -181,20 +169,25 @@ public class JNotifyFileTool implements JNotifyListener {
 		System.out.println("----------------------------file Created--rootPath " + rootPath + ",newName=" + newName
 				+ ",oldName=" + oldName);
 		String reletivePath = newName.replace("\\", "/");
+		fileCopy(rootPath, reletivePath);
+	}
+
+	public Boolean fileCopy(String rootPath, String relativePath) {
 		// 文件后缀名检测
-		if (!adaptSubffix(reletivePath))
-			return;
-		String localPath = rootPath + "/" + reletivePath;
-		File file = new File(localPath);
+		if (!adaptSubffix(relativePath)) {
+			return null;
+		}
+		String absolutePath = rootPath + "/" + relativePath;
+		File file = new File(absolutePath);
 		// 如果file对象是目录或者包含排除目录，则返回
-		if (file.isDirectory() || reletivePath.contains(EXCLUDE_DIR)) {
+		if (file.isDirectory() || relativePath.contains(EXCLUDE_DIR)) {
 			System.out.println("空文件夹或是包含排除目录" + EXCLUDE_DIR);
-			return;
+			return null;
 		}
 		if (IS_LOCAL) {
-			localCopy(rootPath, reletivePath);
+			return localCopy(rootPath, relativePath);
 		} else {
-			ftpRemote(rootPath, reletivePath, 0);
+			return ftpRemote(rootPath, relativePath, 0);
 		}
 	}
 
@@ -205,10 +198,6 @@ public class JNotifyFileTool implements JNotifyListener {
 	 * @param reletivePath 要复制文件的相对路径（含文件名），分隔符为 "/"
 	 */
 	public boolean localCopy(String rootPath, String relativePath) {
-		if (!adaptSubffix(relativePath)) {
-			System.out.println("文件后缀不匹配");
-			return false;
-		}
 		String absolutePath = rootPath + "/" + relativePath;
 		String destFile = DEST_DIR + "/" + relativePath;
 		System.out.println("source file----" + absolutePath);
@@ -224,10 +213,11 @@ public class JNotifyFileTool implements JNotifyListener {
 			int occupiedRetries = 0;
 			while (true) {
 				// 判断文件是否被占用，如果没有被占用则执行文件复制，如果被占用则在最高检测次数内持续检测
-				//boolean flag = fileIsOccupied(absolutePath);
-			   boolean flag = true;
-			   ii++;
-			   if(ii % 3 == 0) flag = false;
+				// boolean flag = fileIsOccupied(absolutePath);
+				boolean flag = true;
+				ii++;
+				if (ii % 3 == 0)
+					flag = false;
 				// 如果没有被占用，执行复制、删除操作
 				if (!flag) {
 					JcopyFile(file1, file2);
@@ -238,22 +228,20 @@ public class JNotifyFileTool implements JNotifyListener {
 					// 如果文件被占用，判断重复检测被占用次数
 				} else {
 					// 超过规定检测次数，将文件名写入sqlite数据库中
-					if (occupiedRetries > MAX_OCCUPIED_RETRIES) {
+					if (occupiedRetries >= MAX_RETRIES) {
 						Statement stat = conn.createStatement();
 						// 已经写进数据库的文件名不能重复插入
-						ResultSet rSet = stat.executeQuery("select*from tbl1 where rootPath in ('" + rootPath
-								+ "') and relativePath in ('" + relativePath + "');");
+						ResultSet rSet = sqliteSelectAll(stat, rootPath, relativePath);
 						if (rSet.next()) {
 							return false;
-						}						
-						stat.executeUpdate("insert into tbl1 values('" + rootPath + "', '" + relativePath + "');");
-						System.out.println("-----------将被占用的文件名" + absolutePath + "写入sqlite数据库中-----------");
-						System.out.println("insert into tbl1 values('" + rootPath + "', '" + relativePath + "');");
-						stat.close();
-						return false;
+						}
+						if (sqliteInsert(stat, rootPath, relativePath)) {
+							System.out.println("-----------将被占用的文件名" + absolutePath + "写入sqlite数据库中-----------");
+							return false;
+						}
 					}
 					System.out.println(absolutePath + "---被占用继续等待---");
-					Thread.sleep(1000);
+					Thread.sleep(3000);
 					occupiedRetries++;
 				}
 			}
@@ -271,8 +259,19 @@ public class JNotifyFileTool implements JNotifyListener {
 	 * @param retries      服务器重连次数
 	 */
 	public boolean ftpRemote(String rootPath, String relativePath, int retries) {
+		String absolutePath = rootPath + "/" + relativePath;
 		if (retries > MAX_RETRIES) {
-			System.err.println("连接失败：重试次数3次！");
+			System.err.println("连接失败：重试次数超过限制！");
+			Statement stat = null;
+			try {
+				stat = conn.createStatement();
+			} catch (SQLException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			if(sqliteInsert(stat, rootPath, relativePath)) {
+				System.out.println("-----------将连接失败的文件名" + absolutePath + "写入sqlite数据库中-----------");
+			}
 			return false;
 		} else if (retries > 0) {
 			System.out.println("ftp重新连接。。。。。。第" + retries + "次");
@@ -326,8 +325,7 @@ public class JNotifyFileTool implements JNotifyListener {
 				}
 			}
 			System.out.println("ftp当前目录:" + ftpClient.printWorkingDirectory());
-			// 判断文件是否被占用，如果没有被占用则执行文件复制，如果被占用则在最高检测次数内持续检测
-			String absolutePath = rootPath + "/" + relativePath;
+			// 判断文件是否被占用，如果没有被占用则执行文件复制，如果被占用则在最高检测次数内持续检测			
 			int occupiedRetries = 0;
 			while (true) {
 				// boolean flag = fileIsOccupied(absolutePath);
@@ -348,22 +346,20 @@ public class JNotifyFileTool implements JNotifyListener {
 					// 如果文件被占用，判断重复检测被占用次数
 				} else {
 					// 超过规定检测次数，将文件名写入sqlite数据库中
-					if (occupiedRetries > MAX_OCCUPIED_RETRIES) {
+					if (occupiedRetries >= MAX_RETRIES) {
 						Statement stat = conn.createStatement();
 						// 已经写进数据库的文件名不能重复插入
-						ResultSet rSet = stat.executeQuery("select*from tbl1 where rootPath in ('" + rootPath
-								+ "') and relativePath in ('" + relativePath + "');");
+						ResultSet rSet = sqliteSelectAll(stat, rootPath, relativePath);
 						if (rSet.next()) {
 							return false;
 						}
-						stat.executeUpdate("insert into tbl1 values('" + rootPath + "', '" + relativePath + "');");
-						System.out.println("-----------将被占用的文件名" + absolutePath + "写入sqlite数据库中-----------");
-						System.out.println("insert into tbl1 values('" + rootPath + "', '" + relativePath + "');");
-						stat.close();
-						return false;
+						if (sqliteInsert(stat, rootPath, relativePath)) {
+							System.out.println("-----------将被占用的文件名" + absolutePath + "写入sqlite数据库中-----------");							
+							return false;
+						}
 					}
 					System.out.println(absolutePath + "---被占用继续等待---");
-					Thread.sleep(1000);
+					Thread.sleep(3000);
 					occupiedRetries++;
 				}
 			}
@@ -391,41 +387,23 @@ public class JNotifyFileTool implements JNotifyListener {
 				try {
 					Statement stat = conn.createStatement();
 					// 搜索数据库，将结果放入数据集ResultSet中
-					ResultSet rSet = stat.executeQuery("select*from tbl1");
+					ResultSet rSet = stat.executeQuery("select * from tbl1");
 					// 遍历这个结果集
 					while (rSet.next()) {
-						String absolutePath = rSet.getString("rootPath") + "/" + rSet.getString("relativePath");
-						// 创建被占用文件对象
-						File file = new File(absolutePath);
 						String rootPath = rSet.getString("rootPath");
 						String relativePath = rSet.getString("relativePath");
+						String absolutePath = rootPath + "/" + relativePath;
+						// 创建被占用文件对象
+						File file = new File(absolutePath);
+
 						// 如果不存在，则退出
 						if (!file.exists()) {
 							break;
 						}
-						// 本地复制
-						if (IS_LOCAL) {
-							if (localCopy(rootPath, relativePath)) {
-								// 文件已经解除占用，其文件名从sqlite数据库中删除
-								stat.executeUpdate("delete from tbl1 where rootPath in ('" + rootPath
-										+ "') and relativePath in ('" + relativePath + "');");
-								stat.close();
+						if (fileCopy(rootPath, relativePath)) {
+							if (sqliteDelete(stat, rootPath, relativePath)) {
 								System.out.println(
 										"-----------文件" + absolutePath + "已经解除占用，其文件名从sqlite数据库中删除------------");
-								System.out.println("delete from tbl1 where rootPath in ('" + rootPath
-										+ "') and relativePath in ('" + relativePath + "');");
-							}
-							// 远程同步
-						} else {
-							if (ftpRemote(rootPath, relativePath, 0)) {
-								// 文件已经解除占用，其文件名从sqlite数据库中删除								
-								stat.executeUpdate("delete from tbl1 where rootPath in ('" + rootPath
-										+ "') and relativePath in ('" + relativePath + "');");
-								stat.close();								
-								System.out.println(
-										"-----------文件" + absolutePath + "已经解除占用，其文件名从sqlite数据库中删除------------");
-								System.out.println("delete from tbl1 where rootPath in ('" + rootPath
-										+ "') and relativePath in ('" + relativePath + "');");
 							}
 						}
 					}
@@ -433,7 +411,7 @@ public class JNotifyFileTool implements JNotifyListener {
 					e.printStackTrace();
 				}
 				try {
-					Thread.sleep(2000);
+					Thread.sleep(1000);
 				} catch (InterruptedException e) {
 					e.printStackTrace();
 				}
@@ -441,6 +419,47 @@ public class JNotifyFileTool implements JNotifyListener {
 
 		}
 
+	}
+
+	// 查询
+	public ResultSet sqliteSelectAll(Statement stat, String rootPath, String relativePath) {
+		ResultSet rSet = null;
+		try {
+			rSet = stat.executeQuery("select*from tbl1 where rootPath in ('" + rootPath + "') and relativePath in ('"
+					+ relativePath + "');");
+			stat.close();
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		return rSet;
+	}
+
+	// 删除
+	public boolean sqliteDelete(Statement stat, String rootPath, String relativePath) {
+		try {
+			stat.executeUpdate("delete from tbl1 where rootPath in ('" + rootPath + "') and relativePath in ('"
+					+ relativePath + "');");
+			stat.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+			return false;
+		}
+		return true;
+
+	}
+
+	// 插入
+	public boolean sqliteInsert(Statement stat, String rootPath, String relativePath) {
+		try {
+			stat.executeUpdate("insert into tbl1 values('" + rootPath + "', '" + relativePath + "');");
+			stat.close();
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			return false;
+		}
+		return true;
 	}
 
 	/**

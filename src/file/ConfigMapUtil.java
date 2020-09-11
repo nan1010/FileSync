@@ -57,7 +57,7 @@ public class ConfigMapUtil {
 	public static String getValueByKey(String key) {
 		return map.get(key);
 	}
-
+	
 	public static Map<String, String> getMap() {
 		return map;
 	}
