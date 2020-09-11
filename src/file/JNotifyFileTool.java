@@ -15,8 +15,8 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.*;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+//import java.util.concurrent.locks.Lock;
+//import java.util.concurrent.locks.ReentrantLock;
 
 public class JNotifyFileTool implements JNotifyListener {
 	// 本地源文件路径
@@ -45,7 +45,10 @@ public class JNotifyFileTool implements JNotifyListener {
 	String OS = null;
 	// FTPClient对象
 	FTPClient ftpClient;
-	Lock lock = new ReentrantLock();
+	
+//	Lock lock = new ReentrantLock();
+	
+	//测试被占用状态
 	int ii;
 
 	// public static String sourceFtpFileName="";
@@ -240,18 +243,15 @@ public class JNotifyFileTool implements JNotifyListener {
 					if (occupiedRetries > MAX_OCCUPIED_RETRIES) {
 						Statement stat = conn.createStatement();
 						// 已经写进数据库的文件名不能重复插入
-						lock.lock();
 						ResultSet rSet = stat.executeQuery("select*from tbl1 where rootPath in ('" + rootPath
 								+ "') and relativePath in ('" + relativePath + "');");
 						if (rSet.next()) {
-							lock.unlock();
 							return false;
 						}
 						System.out.println("-----------将被占用的文件名" + absolutePath + "写入sqlite数据库中-----------");
 						System.out.println("insert into tbl1 values('" + rootPath + "', '" + relativePath + "');");
 						stat.executeUpdate("insert into tbl1 values('" + rootPath + "', '" + relativePath + "');");
 						stat.close();
-						lock.unlock();
 						return false;
 					}
 					System.out.println(absolutePath + "---被占用继续等待---");
@@ -353,19 +353,15 @@ public class JNotifyFileTool implements JNotifyListener {
 					if (occupiedRetries > MAX_OCCUPIED_RETRIES) {
 						Statement stat = conn.createStatement();
 						// 已经写进数据库的文件名不能重复插入
-						lock.lock();
 						ResultSet rSet = stat.executeQuery("select*from tbl1 where rootPath in ('" + rootPath
 								+ "') and relativePath in ('" + relativePath + "');");
 						if (rSet.next()) {
-							lock.unlock();
 							return false;
 						}
-
 						stat.executeUpdate("insert into tbl1 values('" + rootPath + "', '" + relativePath + "');");
 						System.out.println("-----------将被占用的文件名" + absolutePath + "写入sqlite数据库中-----------");
 						System.out.println("insert into tbl1 values('" + rootPath + "', '" + relativePath + "');");
 						stat.close();
-						lock.unlock();
 						return false;
 					}
 					System.out.println(absolutePath + "---被占用继续等待---");
@@ -397,9 +393,7 @@ public class JNotifyFileTool implements JNotifyListener {
 				try {
 					Statement stat = conn.createStatement();
 					// 搜索数据库，将结果放入数据集ResultSet中
-					lock.lock();
 					ResultSet rSet = stat.executeQuery("select*from tbl1");
-					lock.unlock();
 					// 遍历这个结果集
 					while (rSet.next()) {
 						String absolutePath = rSet.getString("rootPath") + "/" + rSet.getString("relativePath");
@@ -415,11 +409,9 @@ public class JNotifyFileTool implements JNotifyListener {
 						if (IS_LOCAL) {
 							if (localCopy(rootPath, relativePath)) {
 								// 文件已经解除占用，其文件名从sqlite数据库中删除
-								lock.lock();
 								stat.executeUpdate("delete from tbl1 where rootPath in ('" + rootPath
 										+ "') and relativePath in ('" + relativePath + "');");
 								stat.close();
-								lock.unlock();
 								System.out.println(
 										"-----------文件" + absolutePath + "已经解除占用，其文件名从sqlite数据库中删除------------");
 								System.out.println("delete from tbl1 where rootPath in ('" + rootPath
@@ -428,12 +420,10 @@ public class JNotifyFileTool implements JNotifyListener {
 							// 远程同步
 						} else {
 							if (ftpRemote(rootPath, relativePath, 0)) {
-								// 文件已经解除占用，其文件名从sqlite数据库中删除
-								lock.lock();
+								// 文件已经解除占用，其文件名从sqlite数据库中删除								
 								stat.executeUpdate("delete from tbl1 where rootPath in ('" + rootPath
 										+ "') and relativePath in ('" + relativePath + "');");
-								stat.close();
-								lock.unlock();
+								stat.close();								
 								System.out.println(
 										"-----------文件" + absolutePath + "已经解除占用，其文件名从sqlite数据库中删除------------");
 								System.out.println("delete from tbl1 where rootPath in ('" + rootPath
