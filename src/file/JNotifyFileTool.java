@@ -15,8 +15,6 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.*;
-//import java.util.concurrent.locks.Lock;
-//import java.util.concurrent.locks.ReentrantLock;
 
 public class JNotifyFileTool implements JNotifyListener {
 	// 本地源文件路径
