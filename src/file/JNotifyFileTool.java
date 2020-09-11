@@ -245,10 +245,10 @@ public class JNotifyFileTool implements JNotifyListener {
 								+ "') and relativePath in ('" + relativePath + "');");
 						if (rSet.next()) {
 							return false;
-						}
+						}						
+						stat.executeUpdate("insert into tbl1 values('" + rootPath + "', '" + relativePath + "');");
 						System.out.println("-----------将被占用的文件名" + absolutePath + "写入sqlite数据库中-----------");
 						System.out.println("insert into tbl1 values('" + rootPath + "', '" + relativePath + "');");
-						stat.executeUpdate("insert into tbl1 values('" + rootPath + "', '" + relativePath + "');");
 						stat.close();
 						return false;
 					}
