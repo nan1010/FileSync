@@ -46,7 +46,7 @@ public class JNotifyFileTool implements JNotifyListener {
 	// FTPClient对象
 	FTPClient ftpClient;
 	Lock lock = new ReentrantLock();
-	//int ii;	
+	int ii;
 
 	// public static String sourceFtpFileName="";
 	// public static String sourceFtpFileName2="";
@@ -61,16 +61,19 @@ public class JNotifyFileTool implements JNotifyListener {
 	static int MAX_RETRIES = 3;
 	// 文件被占用的最大检测次数 - 1
 	static int MAX_OCCUPIED_RETRIES = 0;
+	// sqlite数据库连接对象
+	private static Connection conn;
 
 	public static void main(String[] args) {
 		JNotifyFileTool jNotifyFileTool = new JNotifyFileTool();
 		// 初始化sqlite数据库，建立连接、创建表，用于存放被占用文件名
 		try {
 			Class.forName("org.sqlite.JDBC");
-			Connection conn = DriverManager.getConnection("jdbc:sqlite:test.db");
+			conn = DriverManager.getConnection("jdbc:sqlite:test.db");
 			Statement stat = conn.createStatement();
 			stat.executeUpdate("drop table if exists tbl1;");
 			stat.executeUpdate("create table if not exists tbl1(rootPath varchar(80),relativePath varchar(80));");
+			stat.close();
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -128,10 +131,8 @@ public class JNotifyFileTool implements JNotifyListener {
 					}
 				}
 			}
-
 			System.out.println("----------------------------初始化同步文件 结束---");
 		}
-
 	}
 
 	/**
@@ -219,13 +220,13 @@ public class JNotifyFileTool implements JNotifyListener {
 				file2.getParentFile().mkdirs();
 				System.out.println("创建目录----" + file2.getParent());
 			}
-			int occupiedRetries = 0;			
+			int occupiedRetries = 0;
 			while (true) {
 				// 判断文件是否被占用，如果没有被占用则执行文件复制，如果被占用则在最高检测次数内持续检测
-				boolean flag = fileIsOccupied(absolutePath);
-				//boolean flag = true;				
-				//ii++;
-				//if(ii == 3) flag = false;
+				//boolean flag = fileIsOccupied(absolutePath);
+			   boolean flag = true;
+			   ii++;
+			   if(ii % 3 == 0) flag = false;
 				// 如果没有被占用，执行复制、删除操作
 				if (!flag) {
 					JcopyFile(file1, file2);
@@ -237,8 +238,6 @@ public class JNotifyFileTool implements JNotifyListener {
 				} else {
 					// 超过规定检测次数，将文件名写入sqlite数据库中
 					if (occupiedRetries > MAX_OCCUPIED_RETRIES) {
-						Class.forName("org.sqlite.JDBC");
-						Connection conn = DriverManager.getConnection("jdbc:sqlite:test.db");
 						Statement stat = conn.createStatement();
 						// 已经写进数据库的文件名不能重复插入
 						lock.lock();
@@ -251,6 +250,7 @@ public class JNotifyFileTool implements JNotifyListener {
 						System.out.println("-----------将被占用的文件名" + absolutePath + "写入sqlite数据库中-----------");
 						System.out.println("insert into tbl1 values('" + rootPath + "', '" + relativePath + "');");
 						stat.executeUpdate("insert into tbl1 values('" + rootPath + "', '" + relativePath + "');");
+						stat.close();
 						lock.unlock();
 						return false;
 					}
@@ -332,7 +332,11 @@ public class JNotifyFileTool implements JNotifyListener {
 			String absolutePath = rootPath + "/" + relativePath;
 			int occupiedRetries = 0;
 			while (true) {
-				boolean flag = fileIsOccupied(absolutePath);
+				// boolean flag = fileIsOccupied(absolutePath);
+				boolean flag = true;
+				ii++;
+				if (ii % 3 == 0)
+					flag = false;
 				// 如果没有被占用，执行远程同步、删除操作
 				if (!flag) {
 					File file = new File(absolutePath);
@@ -347,8 +351,6 @@ public class JNotifyFileTool implements JNotifyListener {
 				} else {
 					// 超过规定检测次数，将文件名写入sqlite数据库中
 					if (occupiedRetries > MAX_OCCUPIED_RETRIES) {
-						Class.forName("org.sqlite.JDBC");
-						Connection conn = DriverManager.getConnection("jdbc:sqlite:test.db");
 						Statement stat = conn.createStatement();
 						// 已经写进数据库的文件名不能重复插入
 						lock.lock();
@@ -358,10 +360,11 @@ public class JNotifyFileTool implements JNotifyListener {
 							lock.unlock();
 							return false;
 						}
-												
+
 						stat.executeUpdate("insert into tbl1 values('" + rootPath + "', '" + relativePath + "');");
-						System.out.println("-----------此文件被占用，将其文件名插入sqlite数据库-----------");
+						System.out.println("-----------将被占用的文件名" + absolutePath + "写入sqlite数据库中-----------");
 						System.out.println("insert into tbl1 values('" + rootPath + "', '" + relativePath + "');");
+						stat.close();
 						lock.unlock();
 						return false;
 					}
@@ -381,21 +384,22 @@ public class JNotifyFileTool implements JNotifyListener {
 	// 启动线程的方法
 	public void startThread() {
 		// 每隔10分钟循环调用线程
-		Thread thread = new Thread(new HandlerIfOccupied());	
-		thread.start();			
-	}	
+		Thread thread = new Thread(new HandlerIfOccupied());
+		thread.start();
+	}
+
 	// 线程每隔10分钟遍历sqlite数据表中被占用的文件名，试图重新复制、传输其中解除占用的文件
 	class HandlerIfOccupied implements Runnable {
 
 		@Override
 		public void run() {
-			while(true) {
+			while (true) {
 				try {
-					Class.forName("org.sqlite.JDBC");
-					Connection conn = DriverManager.getConnection("jdbc:sqlite:test.db");
 					Statement stat = conn.createStatement();
 					// 搜索数据库，将结果放入数据集ResultSet中
+					lock.lock();
 					ResultSet rSet = stat.executeQuery("select*from tbl1");
+					lock.unlock();
 					// 遍历这个结果集
 					while (rSet.next()) {
 						String absolutePath = rSet.getString("rootPath") + "/" + rSet.getString("relativePath");
@@ -409,28 +413,31 @@ public class JNotifyFileTool implements JNotifyListener {
 						}
 						// 本地复制
 						if (IS_LOCAL) {
-							if (localCopy(rootPath, relativePath)) {			
-								// 文件已经解除占用，其文件名从sqlite数据库中删除									
+							if (localCopy(rootPath, relativePath)) {
+								// 文件已经解除占用，其文件名从sqlite数据库中删除
 								lock.lock();
 								stat.executeUpdate("delete from tbl1 where rootPath in ('" + rootPath
 										+ "') and relativePath in ('" + relativePath + "');");
+								stat.close();
 								lock.unlock();
-								System.out.println("-----------文件" + absolutePath + "已经解除占用，其文件名从sqlite数据库中删除------------");
+								System.out.println(
+										"-----------文件" + absolutePath + "已经解除占用，其文件名从sqlite数据库中删除------------");
 								System.out.println("delete from tbl1 where rootPath in ('" + rootPath
 										+ "') and relativePath in ('" + relativePath + "');");
 							}
 							// 远程同步
 						} else {
 							if (ftpRemote(rootPath, relativePath, 0)) {
-								System.out.println("-----------文件" + absolutePath + "已经解除占用，其文件名从sqlite数据库中删除------------");
 								// 文件已经解除占用，其文件名从sqlite数据库中删除
-								
+								lock.lock();
 								stat.executeUpdate("delete from tbl1 where rootPath in ('" + rootPath
 										+ "') and relativePath in ('" + relativePath + "');");
-								
-								System.out.println("-----------文件" + absolutePath + "已经解除占用，其文件名从sqlite数据库中删除------------");
+								stat.close();
+								lock.unlock();
+								System.out.println(
+										"-----------文件" + absolutePath + "已经解除占用，其文件名从sqlite数据库中删除------------");
 								System.out.println("delete from tbl1 where rootPath in ('" + rootPath
-										+ "') and relativePath in ('" + relativePath + "');");			
+										+ "') and relativePath in ('" + relativePath + "');");
 							}
 						}
 					}
@@ -594,4 +601,3 @@ public class JNotifyFileTool implements JNotifyListener {
 		return files;
 	}
 }
- 
